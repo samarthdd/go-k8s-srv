@@ -7,5 +7,4 @@ RUN cd cmd \
 FROM alpine
 COPY --from=builder /go/src/github.com/k8-proxy/go-k8s-srv/cmd/go-k8s-srv /bin/go-k8s-srv
 
-
 ENTRYPOINT ["/bin/go-k8s-srv"]

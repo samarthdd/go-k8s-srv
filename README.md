@@ -23,7 +23,7 @@
     </a>
 </p>
 
-This is the service 1 of [this repo](https://github.com/k8-proxy/go-k8s-infra) that will get the file from icap-server and upload it to minio
+This is the service  of [this repo](https://github.com/k8-proxy/go-k8s-infra) that at like middleware between icap-server and processing service
 
 ### Steps of processing
 

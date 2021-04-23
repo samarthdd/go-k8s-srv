@@ -68,7 +68,7 @@ func main() {
 
 	outMsgs, outChannel, err := rabbitmq.NewQueueConsumer(connection, ProcessingOutcomeQueueName, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey)
 	if err != nil {
-		zlog.Fatal().Err(err).Msg("could not start consumer ")
+		zlog.Fatal().Err(err).Msg("could not start ProcessingOutcome consumer ")
 
 	}
 	defer outChannel.Close()
@@ -94,22 +94,22 @@ func main() {
 	// Consume
 	go func() {
 		for d := range msgs {
-			zlog.Info().Msg("request consumer  received message from queue ")
+			zlog.Info().Msg("adaptation request consumer  received message from queue ")
 
 			err := processMessage(d)
 			if err != nil {
-				zlog.Error().Err(err).Msg("Failed to process message")
+				zlog.Error().Err(err).Msg("error adaptationRequest consumer Failed to process message")
 			}
 		}
 	}()
 
 	go func() {
 		for d := range outMsgs {
-			zlog.Info().Msg(" outcome consumer received message from queue ")
+			zlog.Info().Msg(" processingOutcome consumer received message from queue ")
 
-			err := oprocessMessage(d)
+			err := outcomeProcessMessage(d)
 			if err != nil {
-				zlog.Error().Err(err).Msg("Failed to process message")
+				zlog.Error().Err(err).Msg("error processingOutcome consumer Failed to process message")
 			}
 		}
 	}()
@@ -129,7 +129,7 @@ func createBucketIfNotExist(bucketName string) error {
 
 		err := minio.CreateNewBucket(minioClient, bucketName)
 		if err != nil {
-			return fmt.Errorf("could not create minio bucket : %s", err)
+			return fmt.Errorf("error could not create minio bucket : %s", err)
 		}
 	}
 	return nil
@@ -145,7 +145,7 @@ func processMessage(d amqp.Delivery) error {
 
 	publisher, err := rabbitmq.NewQueuePublisher(connection, ProcessingRequestExchange)
 	if err != nil {
-		zlog.Fatal().Err(err).Msg("could not start  ProcessingRequest publisher ")
+		return fmt.Errorf("error  starting  Processing Request publisher : %s", err)
 	}
 	defer publisher.Close()
 
@@ -158,56 +158,47 @@ func processMessage(d amqp.Delivery) error {
 	// Upload the source file to Minio and Get presigned URL
 	sourcePresignedURL, err := minio.UploadAndReturnURL(minioClient, sourceMinioBucket, input, time.Second*60*60*24)
 	if err != nil {
-		return err
+		return fmt.Errorf("error uploading file from minio : %s", err)
 	}
 	zlog.Info().Msg("file uploaded to minio successfully")
 
 	d.Headers["source-presigned-url"] = sourcePresignedURL.String()
+
 	d.Headers["reply-to"] = d.ReplyTo
 
 	// Publish the details to Rabbit
 	err = rabbitmq.PublishMessage(publisher, ProcessingRequestExchange, ProcessingRequestRoutingKey, d.Headers, []byte(""))
 	if err != nil {
-		return err
+		return fmt.Errorf("error publish to Processing request queue : %s", err)
 	}
+
 	zlog.Info().Str("Exchange", ProcessingRequestExchange).Str("RoutingKey", ProcessingRequestRoutingKey).Msg("message published to queue ")
 
 	return nil
 }
 
-func oprocessMessage(d amqp.Delivery) error {
+func outcomeProcessMessage(d amqp.Delivery) error {
 
-	if d.Headers["file-id"] == nil ||
-		d.Headers["source-file-location"] == nil ||
-		d.Headers["clean-presigned-url"] == nil ||
-		d.Headers["rebuilt-file-location"] == nil {
+	if d.Headers["clean-presigned-url"] == nil ||
+		d.Headers["rebuilt-file-location"] == nil ||
+		d.Headers["reply-to"] == nil {
 		return fmt.Errorf("Headers value is nil")
 	}
 
 	publisher, err := rabbitmq.NewQueuePublisher(connection, ProcessingRequestExchange)
 	if err != nil {
-		zlog.Fatal().Err(err).Msg("could not start  adaptation outcome publisher ")
+		return fmt.Errorf("error  starting  adaptation outcome publisher : %s", err)
 	}
 	defer publisher.Close()
 
-	outputFileLocation := ""
-	cleanPresignedURL := ""
-	if d.Headers["file-id"] != nil {
-		zlog.Info().Msg("file id is ok")
-	}
-	if d.Headers["rebuilt-file-location"] != nil {
-		zlog.Info().Msg("rebuilt-file-location is ok")
-		outputFileLocation = d.Headers["rebuilt-file-location"].(string)
-	}
-	if d.Headers["clean-presigned-url"] != nil {
-		zlog.Info().Msg("clean-presigned-url is ok")
-		cleanPresignedURL = d.Headers["clean-presigned-url"].(string)
-	}
+	cleanPresignedURL := d.Headers["clean-presigned-url"].(string)
+	outputFileLocation := d.Headers["rebuilt-file-location"].(string)
 
 	// Download the file to output file location
 	err = minio.DownloadObject(cleanPresignedURL, outputFileLocation)
 	if err != nil {
-		return err
+
+		return fmt.Errorf("error downloading file from minio : %s", err)
 	}
 	zlog.Info().Msg("file downloaded from minio successfully")
 
@@ -216,14 +207,11 @@ func oprocessMessage(d amqp.Delivery) error {
 
 	//because of missmatch configuration in icap-service  , the exchange and routing keys are null
 	AdaptationOutcomeExchange = ""
-	AdaptationOutcomeRoutingKey = ""
-
-	AdaptationOutcomeExchange = "adaptation-outcome-exchange"
-	AdaptationOutcomeRoutingKey = "adaptation-outcome"
+	AdaptationOutcomeRoutingKey = d.Headers["reply-to"].(string)
 
 	err = rabbitmq.PublishMessage(publisher, AdaptationOutcomeExchange, AdaptationOutcomeRoutingKey, d.Headers, []byte(""))
 	if err != nil {
-		return err
+		return fmt.Errorf("error publish to adaption outcome queue : %s", err)
 	}
 	zlog.Info().Str("Exchange", AdaptationOutcomeExchange).Str("RoutingKey", AdaptationOutcomeRoutingKey).Msg("message published to queue ")
 
