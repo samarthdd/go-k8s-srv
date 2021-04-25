@@ -1,25 +1,25 @@
-# icap-service-1
+# icap-service
 
-<h1 align="center">icap-service-1</h1>
+<h1 align="center">icap-service</h1>
 
 <p align="center">
-    <a href="https://github.com/k8-proxy/go-k8s-srv1/actions/workflows/build.yaml">
-        <img src="https://github.com/k8-proxy/go-k8s-srv1/actions/workflows/build.yaml/badge.svg"/>
+    <a href="https://github.com/k8-proxy/go-k8s-srv/actions/workflows/build.yaml">
+        <img src="https://github.com/k8-proxy/go-k8s-srv/actions/workflows/build.yaml/badge.svg"/>
     </a>
-    <a href="https://codecov.io/gh/k8-proxy/go-k8s-srv1">
-        <img src="https://codecov.io/gh/k8-proxy/go-k8s-srv1/branch/main/graph/badge.svg"/>
+    <a href="https://codecov.io/gh/k8-proxy/go-k8s-srv">
+        <img src="https://codecov.io/gh/k8-proxy/go-k8s-srv/branch/main/graph/badge.svg"/>
     </a>	    
-    <a href="https://goreportcard.com/report/github.com/k8-proxy/go-k8s-srv1">
-      <img src="https://goreportcard.com/badge/k8-proxy/go-k8s-srv1" alt="Go Report Card">
+    <a href="https://goreportcard.com/report/github.com/k8-proxy/go-k8s-srv">
+      <img src="https://goreportcard.com/badge/k8-proxy/go-k8s-srv" alt="Go Report Card">
     </a>
-	<a href="https://github.com/k8-proxy/go-k8s-srv1/pulls">
+	<a href="https://github.com/k8-proxy/go-k8s-srv/pulls">
         <img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat" alt="Contributions welcome">
     </a>
     <a href="https://opensource.org/licenses/Apache-2.0">
         <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="Apache License, Version 2.0">
     </a>
-    <a href="https://github.com/k8-proxy/go-k8s-srv1/releases/latest">
-        <img src="https://img.shields.io/github/release/k8-proxy/go-k8s-srv1.svg?style=flat"/>
+    <a href="https://github.com/k8-proxy/go-k8s-srv/releases/latest">
+        <img src="https://img.shields.io/github/release/k8-proxy/go-k8s-srv.svg?style=flat"/>
     </a>
 </p>
 
@@ -44,8 +44,8 @@ When it starts
 - To build the docker image
 
 ```
-git clone https://github.com/k8-proxy/go-k8s-srv1.git
-cd k8-proxy/go-k8s-srv1
+git clone https://github.com/k8-proxy/go-k8s-srv.git
+cd k8-proxy/go-k8s-srv
 docker build -t <docker_image_name> .
 ```
 
@@ -111,4 +111,4 @@ docker logs <container name>
 
 # Rebuild flow to implement
 
-![new-rebuild-flow-v2](https://github.com/k8-proxy/go-k8s-infra/raw/main/diagram/go-k8s-infra.png)
+![new-rebuild-flow-v2](https://github.com/k8-proxy/go-k8s-srv/raw/main/diagram/go-k8s-infra-drawio.png)
