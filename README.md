@@ -111,4 +111,4 @@ docker logs <container name>
 
 # Rebuild flow to implement
 
-![new-rebuild-flow-v2](https://github.com/k8-proxy/go-k8s-srv/raw/main/diagram/go-k8s-infra-drawio.png)
+![new-rebuild-flow-v2](https://github.com/k8-proxy/go-k8s-infra/raw/main/diagram/go-k8s-infra-srv.png)
