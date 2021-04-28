@@ -23,7 +23,7 @@
     </a>
 </p>
 
-This is the service  of [this repo](https://github.com/k8-proxy/go-k8s-infra) that at like middleware between icap-server and processing service
+This is the service of [this repo](https://github.com/k8-proxy/go-k8s-infra) that at like middleware between icap-server and processing service
 
 ### Steps of processing
 
@@ -89,6 +89,15 @@ docker run -e ADAPTATION_REQUEST_QUEUE_HOSTNAME='<rabbit-host>' \
 
   ```
   docker inspect <rabbitmq_container_name>
+  ```
+
+  - It will be the value of key: `IPAddress`
+
+  - the same as for Minio
+  - To get the variable `<minio-endpoint>` run:
+
+  ```
+  docker inspect <minio_container_name>
   ```
 
   - It will be the value of key: `IPAddress`
