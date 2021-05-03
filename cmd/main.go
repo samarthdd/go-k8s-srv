@@ -171,13 +171,6 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 		return fmt.Errorf("Headers value is nil")
 	}
 
-	publisher, err := rabbitmq.NewQueuePublisher(connection, ProcessingRequestExchange)
-	if err != nil {
-		return fmt.Errorf("error  starting  adaptation outcome publisher : %s", err)
-	}
-
-	defer publisher.Close()
-
 	fileID := d.Headers["file-id"].(string)
 	cleanPresignedURL := d.Headers["clean-presigned-url"].(string)
 	outputFileLocation := d.Headers["rebuilt-file-location"].(string)
@@ -188,6 +181,13 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 
 	defer RemoveProcessedFilesMinio(SourceFile, sourceMinioBucket)
 	defer RemoveProcessedFilesMinio(CleanFile, cleanMinioBucket)
+
+	publisher, err := rabbitmq.NewQueuePublisher(connection, ProcessingRequestExchange)
+	if err != nil {
+		return fmt.Errorf("error  starting  adaptation outcome publisher : %s", err)
+	}
+
+	defer publisher.Close()
 
 	// Download the file to output file location
 	err = minio.DownloadObject(cleanPresignedURL, outputFileLocation)
