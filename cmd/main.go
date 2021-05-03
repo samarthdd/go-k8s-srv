@@ -23,6 +23,14 @@ var (
 	ProcessingRequestRoutingKey = "processing-request"
 	ProcessingRequestQueueName  = "processing-request"
 
+	ProcessingOutcomeExchange   = "processing-outcome-exchange"
+	ProcessingOutcomeRoutingKey = "processing-outcome"
+	ProcessingOutcomeQueueName  = "processing-outcome-queue"
+
+	AdaptationOutcomeExchange   = "adaptation-exchange"
+	AdaptationOutcomeRoutingKey = "adaptation-exchange"
+	AdaptationOutcomeQueueName  = "amq.rabbitmq.reply-to"
+
 	inputMount                     = os.Getenv("INPUT_MOUNT")
 	adaptationRequestQueueHostname = os.Getenv("ADAPTATION_REQUEST_QUEUE_HOSTNAME")
 	adaptationRequestQueuePort     = os.Getenv("ADAPTATION_REQUEST_QUEUE_PORT")
@@ -35,13 +43,7 @@ var (
 	sourceMinioBucket = os.Getenv("MINIO_SOURCE_BUCKET")
 	cleanMinioBucket  = os.Getenv("MINIO_CLEAN_BUCKET")
 
-	ProcessingOutcomeExchange   = "processing-outcome-exchange"
-	ProcessingOutcomeRoutingKey = "processing-outcome"
-	ProcessingOutcomeQueueName  = "processing-outcome-queue"
-
-	AdaptationOutcomeExchange   = "adaptation-exchange"
-	AdaptationOutcomeRoutingKey = "adaptation-exchange"
-	AdaptationOutcomeQueueName  = "amq.rabbitmq.reply-to"
+	transactionStorePath = os.Getenv("TRANSACTION_STORE_PATH")
 
 	minioClient *miniov7.Client
 	connection  *amqp.Connection
@@ -119,22 +121,6 @@ func main() {
 
 }
 
-func createBucketIfNotExist(bucketName string) error {
-	exist, err := minio.CheckIfBucketExists(minioClient, bucketName)
-	if err != nil {
-
-		return fmt.Errorf("error creating source  minio bucket : %s", err)
-	}
-	if !exist {
-
-		err := minio.CreateNewBucket(minioClient, bucketName)
-		if err != nil {
-			return fmt.Errorf("error could not create minio bucket : %s", err)
-		}
-	}
-	return nil
-}
-
 func processMessage(d amqp.Delivery) error {
 
 	if d.Headers["file-id"] == nil ||
@@ -189,10 +175,19 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 	if err != nil {
 		return fmt.Errorf("error  starting  adaptation outcome publisher : %s", err)
 	}
+
 	defer publisher.Close()
 
+	fileID := d.Headers["file-id"].(string)
 	cleanPresignedURL := d.Headers["clean-presigned-url"].(string)
 	outputFileLocation := d.Headers["rebuilt-file-location"].(string)
+	reportFileName := "report.xml"
+
+	SourceFile := fileID
+	CleanFile := fmt.Sprintf("rebuild-%s", fileID)
+
+	defer RemoveProcessedFilesMinio(SourceFile, sourceMinioBucket)
+	defer RemoveProcessedFilesMinio(CleanFile, cleanMinioBucket)
 
 	// Download the file to output file location
 	err = minio.DownloadObject(cleanPresignedURL, outputFileLocation)
@@ -200,7 +195,26 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 
 		return fmt.Errorf("error downloading file from minio : %s", err)
 	}
+
 	zlog.Info().Msg("file downloaded from minio successfully")
+
+	if d.Headers["report-presigned-url"] != nil {
+		reportPresignedURL := d.Headers["report-presigned-url"].(string)
+		reportPath := fmt.Sprintf("%s/%s", transactionStorePath, fileID)
+
+		if _, err := os.Stat(reportPath); os.IsNotExist(err) {
+			os.MkdirAll(reportPath, 0777)
+		}
+
+		reportFileLocation := fmt.Sprintf("%s/%s", reportPath, reportFileName)
+
+		log.Println("report file location ", reportFileLocation)
+
+		err := minio.DownloadObject(reportPresignedURL, reportFileLocation)
+		if err != nil {
+			return err
+		}
+	}
 
 	d.Headers["file-outcome"] = "replace"
 	// Publish the details to Rabbit
@@ -216,4 +230,25 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 	zlog.Info().Str("Exchange", AdaptationOutcomeExchange).Str("RoutingKey", AdaptationOutcomeRoutingKey).Msg("message published to queue ")
 
 	return nil
+}
+
+func createBucketIfNotExist(bucketName string) error {
+	exist, err := minio.CheckIfBucketExists(minioClient, bucketName)
+	if err != nil {
+
+		return fmt.Errorf("error creating source  minio bucket : %s", err)
+	}
+	if !exist {
+
+		err := minio.CreateNewBucket(minioClient, bucketName)
+		if err != nil {
+			return fmt.Errorf("error could not create minio bucket : %s", err)
+		}
+	}
+	return nil
+}
+
+func RemoveProcessedFilesMinio(fileName, BucketName string) {
+	minio.DeleteObjectInMinio(minioClient, BucketName, fileName)
+
 }

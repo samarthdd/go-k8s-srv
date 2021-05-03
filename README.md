@@ -79,6 +79,7 @@ docker run -e ADAPTATION_REQUEST_QUEUE_HOSTNAME='<rabbit-host>' \
 -e MINIO_SECRET_KEY='<minio-secret>' \
 -e MINIO_SOURCE_BUCKET='<bucket-to-upload-file>' \
 -e MINIO_CLEAN_BUCKET='<bucket-to-upload-file>' \
+-e TRANSACTION_STORE_PATH='<path-to-report-file>' \
 
 --name <docker_container_name> <docker_image_name>
 ```
