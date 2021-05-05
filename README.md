@@ -1,29 +1,29 @@
-# icap-service-1
+# icap-service
 
-<h1 align="center">icap-service-1</h1>
+<h1 align="center">icap-service</h1>
 
 <p align="center">
-    <a href="https://github.com/k8-proxy/go-k8s-srv1/actions/workflows/build.yaml">
-        <img src="https://github.com/k8-proxy/go-k8s-srv1/actions/workflows/build.yaml/badge.svg"/>
+    <a href="https://github.com/k8-proxy/go-k8s-srv/actions/workflows/build.yaml">
+        <img src="https://github.com/k8-proxy/go-k8s-srv/actions/workflows/build.yaml/badge.svg"/>
     </a>
-    <a href="https://codecov.io/gh/k8-proxy/go-k8s-srv1">
-        <img src="https://codecov.io/gh/k8-proxy/go-k8s-srv1/branch/main/graph/badge.svg"/>
+    <a href="https://codecov.io/gh/k8-proxy/go-k8s-srv">
+        <img src="https://codecov.io/gh/k8-proxy/go-k8s-srv/branch/main/graph/badge.svg"/>
     </a>	    
-    <a href="https://goreportcard.com/report/github.com/k8-proxy/go-k8s-srv1">
-      <img src="https://goreportcard.com/badge/k8-proxy/go-k8s-srv1" alt="Go Report Card">
+    <a href="https://goreportcard.com/report/github.com/k8-proxy/go-k8s-srv">
+      <img src="https://goreportcard.com/badge/k8-proxy/go-k8s-srv" alt="Go Report Card">
     </a>
-	<a href="https://github.com/k8-proxy/go-k8s-srv1/pulls">
+	<a href="https://github.com/k8-proxy/go-k8s-srv/pulls">
         <img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat" alt="Contributions welcome">
     </a>
     <a href="https://opensource.org/licenses/Apache-2.0">
         <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="Apache License, Version 2.0">
     </a>
-    <a href="https://github.com/k8-proxy/go-k8s-srv1/releases/latest">
-        <img src="https://img.shields.io/github/release/k8-proxy/go-k8s-srv1.svg?style=flat"/>
+    <a href="https://github.com/k8-proxy/go-k8s-srv/releases/latest">
+        <img src="https://img.shields.io/github/release/k8-proxy/go-k8s-srv.svg?style=flat"/>
     </a>
 </p>
 
-This is the service  of [this repo](https://github.com/k8-proxy/go-k8s-infra) that at like middleware between icap-server and processing service
+This is the service of [this repo](https://github.com/k8-proxy/go-k8s-infra) that at like middleware between icap-server and processing service
 
 ### Steps of processing
 
@@ -44,8 +44,8 @@ When it starts
 - To build the docker image
 
 ```
-git clone https://github.com/k8-proxy/go-k8s-srv1.git
-cd k8-proxy/go-k8s-srv1
+git clone https://github.com/k8-proxy/go-k8s-srv.git
+cd k8-proxy/go-k8s-srv
 docker build -t <docker_image_name> .
 ```
 
@@ -79,7 +79,7 @@ docker run -e ADAPTATION_REQUEST_QUEUE_HOSTNAME='<rabbit-host>' \
 -e MINIO_SECRET_KEY='<minio-secret>' \
 -e MINIO_SOURCE_BUCKET='<bucket-to-upload-file>' \
 -e MINIO_CLEAN_BUCKET='<bucket-to-upload-file>' \
-
+-e TRANSACTION_STORE_PATH='<path-to-report-file>' \
 --name <docker_container_name> <docker_image_name>
 ```
 
@@ -89,6 +89,15 @@ docker run -e ADAPTATION_REQUEST_QUEUE_HOSTNAME='<rabbit-host>' \
 
   ```
   docker inspect <rabbitmq_container_name>
+  ```
+
+  - It will be the value of key: `IPAddress`
+
+  - the same as for Minio
+  - To get the variable `<minio-endpoint>` run:
+
+  ```
+  docker inspect <minio_container_name>
   ```
 
   - It will be the value of key: `IPAddress`
