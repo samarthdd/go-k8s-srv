@@ -165,15 +165,9 @@ func processMessage(d amqp.Delivery) error {
 
 func outcomeProcessMessage(d amqp.Delivery) error {
 
-	if d.Headers["clean-presigned-url"] == nil ||
-		d.Headers["rebuilt-file-location"] == nil ||
-		d.Headers["reply-to"] == nil {
-		return fmt.Errorf("Headers value is nil")
-	}
-
-	fileID := d.Headers["file-id"].(string)
-	cleanPresignedURL := d.Headers["clean-presigned-url"].(string)
-	outputFileLocation := d.Headers["rebuilt-file-location"].(string)
+	fileID, _ := d.Headers["file-id"].(string)
+	cleanPresignedURL, _ := d.Headers["clean-presigned-url"].(string)
+	outputFileLocation, _ := d.Headers["rebuilt-file-location"].(string)
 	reportFileName := "report.xml"
 
 	SourceFile := fileID
@@ -190,16 +184,18 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 	defer publisher.Close()
 
 	// Download the file to output file location
-	err = minio.DownloadObject(cleanPresignedURL, outputFileLocation)
-	if err != nil {
+	if cleanPresignedURL != "" {
+		err = minio.DownloadObject(cleanPresignedURL, outputFileLocation)
+		if err != nil {
 
-		return fmt.Errorf("error downloading file from minio : %s", err)
+			return fmt.Errorf("error downloading file from minio : %s", err)
+		}
+
+		zlog.Info().Msg("file downloaded from minio successfully")
 	}
 
-	zlog.Info().Msg("file downloaded from minio successfully")
-
 	if d.Headers["report-presigned-url"] != nil {
-		reportPresignedURL := d.Headers["report-presigned-url"].(string)
+		reportPresignedURL, _ := d.Headers["report-presigned-url"].(string)
 		reportPath := fmt.Sprintf("%s/%s", transactionStorePath, fileID)
 
 		if _, err := os.Stat(reportPath); os.IsNotExist(err) {
@@ -216,12 +212,16 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 		}
 	}
 
+	//{ "file-outcome", Encoding.UTF8.GetBytes("failed") },
+	//{ "file-outcome", Encoding.UTF8.GetBytes("unmodified") },
+	//{ "file-outcome", Encoding.UTF8.GetBytes("failed") },
+
 	d.Headers["file-outcome"] = "replace"
 	// Publish the details to Rabbit
 
 	//because of missmatch configuration in icap-service  , the exchange and routing keys are null
 	AdaptationOutcomeExchange = ""
-	AdaptationOutcomeRoutingKey = d.Headers["reply-to"].(string)
+	AdaptationOutcomeRoutingKey, _ = d.Headers["reply-to"].(string)
 
 	err = rabbitmq.PublishMessage(publisher, AdaptationOutcomeExchange, AdaptationOutcomeRoutingKey, d.Headers, []byte(""))
 	if err != nil {
