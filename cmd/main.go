@@ -188,10 +188,13 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 		err = minio.DownloadObject(cleanPresignedURL, outputFileLocation)
 		if err != nil {
 
-			return fmt.Errorf("error downloading file from minio : %s", err)
+			return fmt.Errorf("error downloading  rebuilt file from minio : %s", err)
 		}
 
-		zlog.Info().Msg("file downloaded from minio successfully")
+		zlog.Info().Msg("rebuilt file downloaded from minio successfully")
+	} else {
+		zlog.Info().Msg("there is no rebuilt file to download from minio")
+
 	}
 
 	if d.Headers["report-presigned-url"] != nil {
@@ -204,14 +207,18 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 
 		reportFileLocation := fmt.Sprintf("%s/%s", reportPath, reportFileName)
 
-		log.Println("report file location ", reportFileLocation)
+		zlog.Info().Str("report file location ", reportFileLocation).Msg("")
 
 		err := minio.DownloadObject(reportPresignedURL, reportFileLocation)
 		if err != nil {
 			return err
 		}
-	}
 
+	} else {
+
+		zlog.Info().Msg("there is no rebuilt file to download from minio")
+
+	}
 	//{ "file-outcome", Encoding.UTF8.GetBytes("failed") },
 	//{ "file-outcome", Encoding.UTF8.GetBytes("unmodified") },
 	//{ "file-outcome", Encoding.UTF8.GetBytes("failed") },
