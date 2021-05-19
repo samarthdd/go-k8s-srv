@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -12,6 +14,9 @@ import (
 	"github.com/streadway/amqp"
 
 	miniov7 "github.com/minio/minio-go/v7"
+
+	"github.com/k8-proxy/go-k8s-srv/tracing"
+	"github.com/opentracing/opentracing-go"
 )
 
 var (
@@ -45,11 +50,29 @@ var (
 
 	transactionStorePath = os.Getenv("TRANSACTION_STORE_PATH")
 
-	minioClient *miniov7.Client
-	connection  *amqp.Connection
+	minioClient  *miniov7.Client
+	connection   *amqp.Connection
+	JeagerStatus bool
 )
 
+const thisServiceName = "GWFileProcess"
+
+type amqpHeadersCarrier map[string]interface{}
+
+var ctx context.Context
+var ProcessTracer opentracing.Tracer
+var ProcessTracer2 opentracing.Tracer
+
+var helloTo string
+
 func main() {
+
+	JeagerStatusEnv := os.Getenv("JAEGER_AGENT_ON")
+	if JeagerStatusEnv == "true" {
+		JeagerStatus = true
+	} else {
+		JeagerStatus = false
+	}
 
 	// Get a connection
 	var err error
@@ -96,10 +119,17 @@ func main() {
 	// Consume
 	go func() {
 		for d := range msgs {
+			if JeagerStatus == true {
+				tracer, closer := tracing.Init(thisServiceName)
+				defer closer.Close()
+				opentracing.SetGlobalTracer(tracer)
+				ProcessTracer = tracer
+			}
 			zlog.Info().Msg("adaptation request consumer  received message from queue ")
 
 			err := processMessage(d)
 			if err != nil {
+				processend(err)
 				zlog.Error().Err(err).Msg("error adaptationRequest consumer Failed to process message")
 			}
 		}
@@ -107,10 +137,18 @@ func main() {
 
 	go func() {
 		for d := range outMsgs {
+			if JeagerStatus == true {
+				tracer, closer := tracing.Init("outMsgs")
+				defer closer.Close()
+				opentracing.SetGlobalTracer(tracer)
+				ProcessTracer2 = tracer
+			}
 			zlog.Info().Msg(" processingOutcome consumer received message from queue ")
 
 			err := outcomeProcessMessage(d)
+
 			if err != nil {
+				processend(err)
 				zlog.Error().Err(err).Msg("error processingOutcome consumer Failed to process message")
 			}
 		}
@@ -120,6 +158,16 @@ func main() {
 	<-forever
 
 }
+func processend(err error) {
+	if JeagerStatus == true && ctx != nil {
+		fmt.Println(err)
+
+		span, _ := opentracing.StartSpanFromContext(ctx, "ProcessingEndError")
+		defer span.Finish()
+		span.LogKV("event", err)
+	}
+
+}
 
 func processMessage(d amqp.Delivery) error {
 
@@ -127,6 +175,14 @@ func processMessage(d amqp.Delivery) error {
 		d.Headers["source-file-location"] == nil ||
 		d.Headers["rebuilt-file-location"] == nil {
 		return fmt.Errorf("Headers value is nil")
+	}
+	if JeagerStatus == true {
+		helloTo = d.Headers["file-id"].(string)
+		span := ProcessTracer.StartSpan("ProcessFile")
+		span.SetTag("send-msg", helloTo)
+		defer span.Finish()
+
+		ctx = opentracing.ContextWithSpan(context.Background(), span)
 	}
 
 	publisher, err := rabbitmq.NewQueuePublisher(connection, ProcessingRequestExchange)
@@ -151,9 +207,19 @@ func processMessage(d amqp.Delivery) error {
 	d.Headers["source-presigned-url"] = sourcePresignedURL.String()
 
 	d.Headers["reply-to"] = d.ReplyTo
+	headers := d.Headers
+
+	if JeagerStatus == true {
+		// Inject the span context into the AMQP header.
+		sp := opentracing.SpanFromContext(ctx)
+		defer sp.Finish()
+		if err := Inject(sp, headers); err != nil {
+			return err
+		}
+	}
 
 	// Publish the details to Rabbit
-	err = rabbitmq.PublishMessage(publisher, ProcessingRequestExchange, ProcessingRequestRoutingKey, d.Headers, []byte(""))
+	err = rabbitmq.PublishMessage(publisher, ProcessingRequestExchange, ProcessingRequestRoutingKey, headers, []byte(""))
 	if err != nil {
 		return fmt.Errorf("error publish to Processing request queue : %s", err)
 	}
@@ -164,10 +230,60 @@ func processMessage(d amqp.Delivery) error {
 }
 
 func outcomeProcessMessage(d amqp.Delivery) error {
+	if d.Headers["uber-trace-id"] != nil && JeagerStatus == true {
+		spCtx1, _ := Extract(d.Headers)
+		if spCtx1 == nil {
+			fmt.Println("cpctxsub nil 2")
+		}
+		spCtx, ctxsuberr := ExtractWithTracer(d.Headers, ProcessTracer2)
+		if spCtx == nil {
+			fmt.Println("cpctxsub nil 1")
+		}
+		if ctxsuberr != nil {
+			fmt.Println(ctxsuberr)
+		}
 
-	fileID, _ := d.Headers["file-id"].(string)
-	cleanPresignedURL, _ := d.Headers["clean-presigned-url"].(string)
-	outputFileLocation, _ := d.Headers["rebuilt-file-location"].(string)
+		// Extract the span context out of the AMQP header.
+		sp := opentracing.StartSpan(
+			"outcomeProcessMessage",
+			opentracing.FollowsFrom(spCtx),
+		)
+		if d.Headers["file-id"] == nil {
+			helloTo = "nil-file-id"
+		} else {
+			helloTo = d.Headers["file-id"].(string)
+
+		}
+		sp.SetTag("file-clean", helloTo)
+		defer sp.Finish()
+		ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		// Update the context with the span for the subsequent reference.
+		ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
+
+	} else {
+		if d.Headers["file-id"] == nil {
+			helloTo = "nil-file-id"
+		} else {
+			helloTo = d.Headers["file-id"].(string)
+
+		}
+		span := ProcessTracer2.StartSpan("outcomeProcessMessage")
+		span.SetTag("msg-procces", helloTo)
+		defer span.Finish()
+
+		ctx = opentracing.ContextWithSpan(context.Background(), span)
+
+	}
+	if d.Headers["clean-presigned-url"] == nil ||
+		d.Headers["rebuilt-file-location"] == nil ||
+		d.Headers["reply-to"] == nil {
+		return fmt.Errorf("Headers value is nil")
+	}
+
+	fileID := d.Headers["file-id"].(string)
+	cleanPresignedURL := d.Headers["clean-presigned-url"].(string)
+	outputFileLocation := d.Headers["rebuilt-file-location"].(string)
 	reportFileName := "report.xml"
 
 	SourceFile := fileID
@@ -230,6 +346,12 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 	AdaptationOutcomeExchange = ""
 	AdaptationOutcomeRoutingKey, _ = d.Headers["reply-to"].(string)
 
+	if JeagerStatus == true && ctx != nil {
+		span, _ := opentracing.StartSpanFromContext(ctx, "AdaptationOutcomeExchange")
+		defer span.Finish()
+		span.LogKV("event", "outcome")
+	}
+
 	err = rabbitmq.PublishMessage(publisher, AdaptationOutcomeExchange, AdaptationOutcomeRoutingKey, d.Headers, []byte(""))
 	if err != nil {
 		return fmt.Errorf("error publish to adaption outcome queue : %s", err)
@@ -240,6 +362,11 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 }
 
 func createBucketIfNotExist(bucketName string) error {
+	if JeagerStatus == true && ctx != nil {
+		span, _ := opentracing.StartSpanFromContext(ctx, "createBucketIfNotExist")
+		defer span.Finish()
+		span.LogKV("event", "createBucket")
+	}
 	exist, err := minio.CheckIfBucketExists(minioClient, bucketName)
 	if err != nil {
 
@@ -256,6 +383,43 @@ func createBucketIfNotExist(bucketName string) error {
 }
 
 func RemoveProcessedFilesMinio(fileName, BucketName string) {
+	if JeagerStatus == true && ctx != nil {
+		span, _ := opentracing.StartSpanFromContext(ctx, "RemoveProcessedFilesMinio")
+		defer span.Finish()
+		span.LogKV("event", "removefile")
+	}
 	minio.DeleteObjectInMinio(minioClient, BucketName, fileName)
 
+}
+func Inject(span opentracing.Span, hdrs amqp.Table) error {
+	c := amqpHeadersCarrier(hdrs)
+	return span.Tracer().Inject(span.Context(), opentracing.TextMap, c)
+}
+func Extract(hdrs amqp.Table) (opentracing.SpanContext, error) {
+	c := amqpHeadersCarrier(hdrs)
+	return opentracing.GlobalTracer().Extract(opentracing.TextMap, c)
+}
+func (c amqpHeadersCarrier) ForeachKey(handler func(key, val string) error) error {
+	for k, val := range c {
+		v, ok := val.(string)
+		if !ok {
+			continue
+		}
+		if err := handler(k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Set implements Set() of opentracing.TextMapWriter.
+func (c amqpHeadersCarrier) Set(key, val string) {
+	c[key] = val
+}
+func ExtractWithTracer(hdrs amqp.Table, tracer opentracing.Tracer) (opentracing.SpanContext, error) {
+	if tracer == nil {
+		return nil, errors.New("tracer is nil")
+	}
+	c := amqpHeadersCarrier(hdrs)
+	return tracer.Extract(opentracing.TextMap, c)
 }
