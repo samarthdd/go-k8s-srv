@@ -233,50 +233,53 @@ func processMessage(d amqp.Delivery) error {
 }
 
 func outcomeProcessMessage(d amqp.Delivery) error {
-	if d.Headers["uber-trace-id"] != nil && JeagerStatus == true {
-		fmt.Println("uber-trace-id")
+	if JeagerStatus == true {
 
-		spCtx, ctxsuberr := ExtractWithTracer(d.Headers, ProcessTracer2)
-		if spCtx == nil {
-			fmt.Println("cpctxsub nil 1")
-		}
-		if ctxsuberr != nil {
-			fmt.Println(ctxsuberr)
-		}
+		if d.Headers["uber-trace-id"] != nil {
+			fmt.Println("uber-trace-id")
 
-		// Extract the span context out of the AMQP header.
-		sp := opentracing.StartSpan(
-			"outcomeProcessMessage",
-			opentracing.FollowsFrom(spCtx),
-		)
-		if d.Headers["file-id"] == nil {
-			helloTo = "nil-file-id"
+			spCtx, ctxsuberr := ExtractWithTracer(d.Headers, ProcessTracer2)
+			if spCtx == nil {
+				fmt.Println("cpctxsub nil 1")
+			}
+			if ctxsuberr != nil {
+				fmt.Println(ctxsuberr)
+			}
+
+			// Extract the span context out of the AMQP header.
+			sp := opentracing.StartSpan(
+				"outcomeProcessMessage",
+				opentracing.FollowsFrom(spCtx),
+			)
+			if d.Headers["file-id"] == nil {
+				helloTo = "nil-file-id"
+			} else {
+				helloTo = d.Headers["file-id"].(string)
+
+			}
+			sp.SetTag("file-clean", helloTo)
+			defer sp.Finish()
+			ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			// Update the context with the span for the subsequent reference.
+			ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
+
 		} else {
-			helloTo = d.Headers["file-id"].(string)
+			fmt.Println("no-uber-trace-id")
+
+			if d.Headers["file-id"] == nil {
+				helloTo = "nil-file-id"
+			} else {
+				helloTo = d.Headers["file-id"].(string)
+
+			}
+			span := ProcessTracer2.StartSpan("outcomeProcessMessage")
+			span.SetTag("msg-procces", helloTo)
+			defer span.Finish()
+
+			ctx = opentracing.ContextWithSpan(context.Background(), span)
 
 		}
-		sp.SetTag("file-clean", helloTo)
-		defer sp.Finish()
-		ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		// Update the context with the span for the subsequent reference.
-		ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
-
-	} else {
-		fmt.Println("no-uber-trace-id")
-
-		if d.Headers["file-id"] == nil {
-			helloTo = "nil-file-id"
-		} else {
-			helloTo = d.Headers["file-id"].(string)
-
-		}
-		span := ProcessTracer2.StartSpan("outcomeProcessMessage")
-		span.SetTag("msg-procces", helloTo)
-		defer span.Finish()
-
-		ctx = opentracing.ContextWithSpan(context.Background(), span)
-
 	}
 	if d.Headers["clean-presigned-url"] == nil ||
 		d.Headers["rebuilt-file-location"] == nil ||
