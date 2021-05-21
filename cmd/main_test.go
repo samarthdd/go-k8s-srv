@@ -1,10 +1,11 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ var ResourceMQ *dockertest.Resource
 var ResourceMinio *dockertest.Resource
 var poolMq *dockertest.Pool
 var poolMinio *dockertest.Pool
+var secretsstring string
 
 func rabbitserver() {
 	var errpool error
@@ -56,8 +58,8 @@ func rabbitserver() {
 func minioserver() {
 	var errpool error
 
-	minioAccessKey = os.Getenv("MINIO_ACCESS_KEY")
-	minioSecretKey = os.Getenv("MINIO_SECRET_KEY")
+	minioAccessKey = secretsstring
+	minioSecretKey = secretsstring
 
 	poolMinio, errpool = dockertest.NewPool("")
 	if errpool != nil {
@@ -114,14 +116,18 @@ func TestProcessMessage(t *testing.T) {
 	AdaptationOutcomeExchange = "adaptation-exchange"
 	AdaptationOutcomeRoutingKey = "adaptation-exchange"
 	AdaptationOutcomeQueueName = "amq.rabbitmq.reply-to"
+	// get env secrets
+	var errstring error
 
-	minioAccessKey = os.Getenv("MINIO_ACCESS_KEY")
-	minioSecretKey = os.Getenv("MINIO_SECRET_KEY")
-	if minioAccessKey == "" || minioSecretKey == "" {
-		log.Fatalf("[x] get Getenv error fail")
+	secretsstring, errstring = GenerateRandomString(8)
+	if errstring != nil {
+		log.Fatalf("[x] GenerateRandomString error: %s", errstring)
+
 		return
 	}
-	log.Println("[√] get Getenv  successfully")
+
+	minioAccessKey = secretsstring
+	minioSecretKey = secretsstring
 
 	rabbitserver()
 	log.Println("[√] create AMQP  successfully")
@@ -180,7 +186,6 @@ func TestProcessMessage(t *testing.T) {
 
 	}
 	log.Println("[√] create clean Minio Bucket successfully")
-
 	fn := "unittest.pdf"
 	fullpath := fmt.Sprintf("%s", fn)
 	fnrebuild := fmt.Sprintf("rebuild-%s", fn)
@@ -195,8 +200,36 @@ func TestProcessMessage(t *testing.T) {
 	var d amqp.Delivery
 	d.Headers = table
 	t.Run("ProcessMessage", func(t *testing.T) {
-		processMessage(d)
+		result := processMessage(d)
+		if result != nil {
 
+			t.Errorf("processMessage(amqp.Delivery) = %d; want nil", result)
+
+		} else {
+			log.Println("[√] ProcessMessage successfully")
+
+		}
+
+	})
+	tableout := amqp.Table{
+		"file-id":               fn,
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+
+	var dout amqp.Delivery
+	dout.Headers = tableout
+	t.Run("outcomeProcessMessage", func(t *testing.T) {
+		testresult := outcomeProcessMessage(dout)
+		if testresult != nil {
+
+			t.Errorf("outcomeProcessMessage(amqp.Delivery) = %d; want nil", testresult)
+
+		} else {
+			log.Println("[√] ProcessMessage successfully")
+
+		}
 	})
 	// When you're done, kill and remove the container
 	if err = poolMq.Purge(ResourceMQ); err != nil {
@@ -206,4 +239,17 @@ func TestProcessMessage(t *testing.T) {
 		fmt.Printf("Could not purge resource: %s", err)
 	}
 
+}
+func GenerateRandomString(n int) (string, error) {
+	const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	ret := make([]byte, n)
+	for i := 0; i < n; i++ {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(letters))))
+		if err != nil {
+			return "", err
+		}
+		ret[i] = letters[num.Int64()]
+	}
+
+	return string(ret), nil
 }
