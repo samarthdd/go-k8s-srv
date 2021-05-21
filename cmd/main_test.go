@@ -114,7 +114,7 @@ func TestProcessMessage(t *testing.T) {
 	AdaptationOutcomeExchange = "adaptation-exchange"
 	AdaptationOutcomeRoutingKey = "adaptation-exchange"
 	AdaptationOutcomeQueueName = "amq.rabbitmq.reply-to"
-
+	// get env secrets
 	minioAccessKey = os.Getenv("MINIO_ACCESS_KEY")
 	minioSecretKey = os.Getenv("MINIO_SECRET_KEY")
 	if minioAccessKey == "" || minioSecretKey == "" {
