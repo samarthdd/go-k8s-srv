@@ -13,7 +13,6 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
-	zlog "github.com/rs/zerolog/log"
 	"github.com/streadway/amqp"
 )
 
@@ -98,6 +97,7 @@ func minioserver() {
 }
 
 func TestProcessMessage(t *testing.T) {
+	log.Println("[√] start test")
 	JeagerStatus = false
 	AdpatationReuquestExchange = "adaptation-exchange"
 	AdpatationReuquestRoutingKey = "adaptation-request"
@@ -114,19 +114,30 @@ func TestProcessMessage(t *testing.T) {
 	AdaptationOutcomeExchange = "adaptation-exchange"
 	AdaptationOutcomeRoutingKey = "adaptation-exchange"
 	AdaptationOutcomeQueueName = "amq.rabbitmq.reply-to"
+
 	minioAccessKey = os.Getenv("MINIO_ACCESS_KEY")
 	minioSecretKey = os.Getenv("MINIO_SECRET_KEY")
+	if minioAccessKey == "" || minioSecretKey == "" {
+		log.Fatalf("[x] get Getenv error fail")
+		return
+	}
+	log.Println("[√] get Getenv  successfully")
 
 	rabbitserver()
+	log.Println("[√] create AMQP  successfully")
+
 	minioserver()
+	log.Println("[√] create minio  successfully")
+
 	time.Sleep(40 * time.Second)
 
 	var err error
 	// Get a connection //rabbitmq
 	connection, err = amqp.Dial("amqp://localhost:5672")
 	if err != nil {
-		log.Fatalf("%s", err)
+		log.Fatalf("[x] AMQP connection error: %s", err)
 	}
+	log.Println("[√] AMQP Connected successfully")
 	defer connection.Close()
 	// now we can instantiate minio client
 	minioClient, err = min7.New(endpoint, &min7.Options{
@@ -134,41 +145,42 @@ func TestProcessMessage(t *testing.T) {
 		Secure: false,
 	})
 	if err != nil {
-		log.Println("Failed to create minio client:", err)
+		log.Fatalf("[x] Failed to create minio client error: %s", err)
 		return
 	}
+	log.Println("[√] create minio client successfully")
 	// Start a consumer
 	_, ch, err := rabbitmq.NewQueueConsumer(connection, AdpatationReuquestQueueName, AdpatationReuquestExchange, AdpatationReuquestRoutingKey)
 	if err != nil {
-		zlog.Fatal().Err(err).Msg("could not start  AdpatationReuquest consumer ")
+		log.Fatalf("[x] could not start  AdpatationReuquest consumer error: %s", err)
 	}
+	log.Println("[√] create start  Adpatation Reuquest consumer successfully")
 	defer ch.Close()
 
 	_, outChannel, err := rabbitmq.NewQueueConsumer(connection, ProcessingOutcomeQueueName, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey)
 	if err != nil {
-		zlog.Fatal().Err(err).Msg("could not start ProcessingOutcome consumer ")
+		log.Fatalf("[x] Failed to create consumer error: %s", err)
 
 	}
+	log.Println("[√] create  consumer successfully")
 	defer outChannel.Close()
-	/*
-		minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, false)
 
-		if err != nil {
-			zlog.Fatal().Err(err).Msg("could not start minio client ")
-		}
-	*/
 	sourceMinioBucket = "source"
 	cleanMinioBucket = "clean"
 
 	err = createBucketIfNotExist(sourceMinioBucket)
 	if err != nil {
-		zlog.Error().Err(err).Msg(" sourceMinioBucket createBucketIfNotExist error")
+		log.Fatalf("[x] sourceMinioBucket createBucketIfNotExist error: %s", err)
 	}
+	log.Println("[√] create source Minio Bucket successfully")
 
 	err = createBucketIfNotExist(cleanMinioBucket)
 	if err != nil {
-		zlog.Error().Err(err).Msg("cleanMinioBucket createBucketIfNotExist error")
+		log.Fatalf("[x] cleanMinioBucket createBucketIfNotExist error: %s", err)
+
 	}
+	log.Println("[√] create clean Minio Bucket successfully")
+
 	fn := "test.pdf"
 	fullpath := fmt.Sprintf("%s", fn)
 	fnrebuild := fmt.Sprintf("rebuild-%s", fn)
