@@ -105,15 +105,6 @@ docker run -e ADAPTATION_REQUEST_QUEUE_HOSTNAME='<rabbit-host>' \
   ```
 
   - It will be the value of key: `IPAddress`
-  
-# Unit Testing Prerequisites
-You need to create the following repo secrets:
-- TEST_MINIO_ACCESS_KEY
-- TEST_MINIO_SECRET_KEY
-
-For local testing you need to create the following env variables:
-- MINIO_ACCESS_KEY
-- MINIO_SECRET_KEY
 
 # Testing steps
 
