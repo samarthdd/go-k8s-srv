@@ -181,7 +181,7 @@ func TestProcessMessage(t *testing.T) {
 	}
 	log.Println("[√] create clean Minio Bucket successfully")
 
-	fn := "test.pdf"
+	fn := "unittest.pdf"
 	fullpath := fmt.Sprintf("%s", fn)
 	fnrebuild := fmt.Sprintf("rebuild-%s", fn)
 	table := amqp.Table{
