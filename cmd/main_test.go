@@ -186,7 +186,6 @@ func TestProcessMessage(t *testing.T) {
 
 	}
 	log.Println("[√] create clean Minio Bucket successfully")
-
 	fn := "unittest.pdf"
 	fullpath := fmt.Sprintf("%s", fn)
 	fnrebuild := fmt.Sprintf("rebuild-%s", fn)
@@ -201,8 +200,36 @@ func TestProcessMessage(t *testing.T) {
 	var d amqp.Delivery
 	d.Headers = table
 	t.Run("ProcessMessage", func(t *testing.T) {
-		processMessage(d)
+		result := processMessage(d)
+		if result != nil {
 
+			t.Errorf("processMessage(amqp.Delivery) = %d; want nil", result)
+
+		} else {
+			log.Println("[√] ProcessMessage successfully")
+
+		}
+
+	})
+	tableout := amqp.Table{
+		"file-id":               fn,
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+
+	var dout amqp.Delivery
+	dout.Headers = tableout
+	t.Run("outcomeProcessMessage", func(t *testing.T) {
+		testresult := outcomeProcessMessage(dout)
+		if testresult != nil {
+
+			t.Errorf("outcomeProcessMessage(amqp.Delivery) = %d; want nil", testresult)
+
+		} else {
+			log.Println("[√] ProcessMessage successfully")
+
+		}
 	})
 	// When you're done, kill and remove the container
 	if err = poolMq.Purge(ResourceMQ); err != nil {
