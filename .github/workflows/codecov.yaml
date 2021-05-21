@@ -23,8 +23,8 @@ jobs:
           fi
       - name: TestCov
         env: 
-          MINIO_ACCESS_KEY: "testminioadmin"
-          MINIO_SECRET_KEY: "testminioadmin"
+          MINIO_ACCESS_KEY: ${{ secrets.TEST_MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.TEST_MINIO_SECRET_KEY }}
         run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Upload coverage report
