@@ -291,6 +291,29 @@ func TestProcessMessage(t *testing.T) {
 
 		}
 	})
+	if JeagerStatus {
+		t.Run("outcomeProcessMessagewithtrace", func(t *testing.T) {
+			helloTo = d.Headers["file-id"].(string)
+			span := ProcessTracer.StartSpan("ProcessFile")
+			span.SetTag("send-msg", helloTo)
+			defer span.Finish()
+
+			ctx = opentracing.ContextWithSpan(context.Background(), span)
+			if err := Inject(span, tableout); err != nil {
+				t.Errorf("outcomeProcessMessagewithtrace(amqp.Delivery) = %d; want nil", err)
+
+			}
+			testresult := outcomeProcessMessage(dout)
+			if testresult != nil {
+
+				t.Errorf("outcomeProcessMessage(amqp.Delivery) = %d; want nil", testresult)
+
+			} else {
+				log.Println("[√] ProcessMessage successfully")
+
+			}
+		})
+	}
 	// When you're done, kill and remove the container
 	if err = poolMq.Purge(ResourceMQ); err != nil {
 		fmt.Printf("Could not purge resource: %s", err)
