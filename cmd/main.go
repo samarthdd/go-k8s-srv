@@ -284,7 +284,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 	if d.Headers["clean-presigned-url"] == nil ||
 		d.Headers["rebuilt-file-location"] == nil ||
 		d.Headers["reply-to"] == nil {
-		return fmt.Errorf("Headers value is nil")
+		return fmt.Errorf("headers value is nil")
 	}
 
 	fileID := d.Headers["file-id"].(string)
@@ -356,6 +356,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 		span, _ := opentracing.StartSpanFromContext(ctx, "AdaptationOutcomeExchange")
 		defer span.Finish()
 		span.LogKV("event", "outcome")
+
 	}
 
 	err = rabbitmq.PublishMessage(publisher, AdaptationOutcomeExchange, AdaptationOutcomeRoutingKey, d.Headers, []byte(""))
