@@ -341,6 +341,7 @@ func TestInject(t *testing.T) {
 }
 
 func Test_processend(t *testing.T) {
+
 	type args struct {
 		err error
 	}
@@ -349,6 +350,10 @@ func Test_processend(t *testing.T) {
 		args args
 	}{
 		// TODO: Add test cases.
+		{
+			"test",
+			args{fmt.Errorf("Err is: %s", "creat err")},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
