@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"reflect"
 	"testing"
 	"time"
 
@@ -316,4 +317,116 @@ func GenerateRandomString(n int) (string, error) {
 	}
 
 	return string(ret), nil
+}
+
+func TestInject(t *testing.T) {
+	type args struct {
+		span opentracing.Span
+		hdrs amqp.Table
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := Inject(tt.args.span, tt.args.hdrs); (err != nil) != tt.wantErr {
+				t.Errorf("Inject() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func Test_processend(t *testing.T) {
+	type args struct {
+		err error
+	}
+	tests := []struct {
+		name string
+		args args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processend(tt.args.err)
+		})
+	}
+}
+
+func TestExtract(t *testing.T) {
+	type args struct {
+		hdrs amqp.Table
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    opentracing.SpanContext
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Extract(tt.args.hdrs)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Extract() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Extract() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_amqpHeadersCarrier_ForeachKey(t *testing.T) {
+	type args struct {
+		handler func(key, val string) error
+	}
+	tests := []struct {
+		name    string
+		c       amqpHeadersCarrier
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.c.ForeachKey(tt.args.handler); (err != nil) != tt.wantErr {
+				t.Errorf("amqpHeadersCarrier.ForeachKey() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestExtractWithTracer(t *testing.T) {
+	type args struct {
+		hdrs   amqp.Table
+		tracer opentracing.Tracer
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    opentracing.SpanContext
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ExtractWithTracer(tt.args.hdrs, tt.args.tracer)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ExtractWithTracer() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ExtractWithTracer() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
