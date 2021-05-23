@@ -9,9 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/k8-proxy/go-k8s-srv/tracing"
 	"github.com/k8-proxy/k8-go-comm/pkg/rabbitmq"
 	min7 "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/opentracing/opentracing-go"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"github.com/streadway/amqp"
@@ -22,10 +24,51 @@ var TestMQTable amqp.Table
 var endpoint string
 var ResourceMQ *dockertest.Resource
 var ResourceMinio *dockertest.Resource
+var ResourceJG *dockertest.Resource
+
 var poolMq *dockertest.Pool
 var poolMinio *dockertest.Pool
+var poolJG *dockertest.Pool
+
 var secretsstring string
 
+func jaegerserver() {
+	var errpool error
+
+	poolJG, errpool = dockertest.NewPool("")
+	if errpool != nil {
+		log.Fatalf("Could not connect to docker: %s", errpool)
+	}
+	opts := dockertest.RunOptions{
+		Repository: "jaegertracing/all-in-one",
+		Tag:        "latest",
+
+		/*
+					 - "5775:5775/udp"
+			        - "6831:6831/udp"
+			        - "6832:6832/udp"
+			        - "5778:5778/tcp"
+			        - "16686:16686"
+			        - "14268:14268"
+			        - "9411:9411"
+		*/
+		PortBindings: map[docker.Port][]docker.PortBinding{
+			"5775/udp": {{HostPort: "5775"}},
+			"6831/udp": {{HostPort: "6831"}},
+			"6832/udp": {{HostPort: "6832"}},
+			"5778/tcp": {{HostPort: "5778"}},
+			"16686":    {{HostPort: "16686"}},
+			"14268":    {{HostPort: "14268"}},
+			"9411":     {{HostPort: "9411"}},
+		},
+	}
+	resource, err := poolJG.RunWithOptions(&opts)
+	if err != nil {
+		log.Fatalf("Could not start resource: %s", err.Error())
+	}
+	ResourceJG = resource
+
+}
 func rabbitserver() {
 	var errpool error
 
@@ -100,7 +143,7 @@ func minioserver() {
 
 func TestProcessMessage(t *testing.T) {
 	log.Println("[√] start test")
-	JeagerStatus = false
+	JeagerStatus = true
 	AdpatationReuquestExchange = "adaptation-exchange"
 	AdpatationReuquestRoutingKey = "adaptation-request"
 	AdpatationReuquestQueueName = "adaptation-request-queue"
@@ -128,6 +171,21 @@ func TestProcessMessage(t *testing.T) {
 
 	minioAccessKey = secretsstring
 	minioSecretKey = secretsstring
+	if JeagerStatus == true {
+		jaegerserver()
+		log.Println("[√] create Jaeger  successfully")
+		tracer, closer := tracing.Init(thisServiceName)
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		ProcessTracer = tracer
+		log.Println("[√] create Jaeger ProcessTracer successfully")
+
+		tracer, closer = tracing.Init("outMsgs")
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		ProcessTracer2 = tracer
+		log.Println("[√] create Jaeger ProcessTracer2 successfully")
+	}
 
 	rabbitserver()
 	log.Println("[√] create AMQP  successfully")
@@ -237,6 +295,12 @@ func TestProcessMessage(t *testing.T) {
 	}
 	if err = poolMinio.Purge(ResourceMinio); err != nil {
 		fmt.Printf("Could not purge resource: %s", err)
+	}
+	if JeagerStatus == true {
+
+		if err = poolJG.Purge(ResourceJG); err != nil {
+			fmt.Printf("Could not purge resource: %s", err)
+		}
 	}
 
 }
