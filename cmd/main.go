@@ -66,6 +66,10 @@ var ProcessTracer2 opentracing.Tracer
 
 var helloTo string
 
+const (
+	presignedUrlExpireIn = time.Hour * 24
+)
+
 func main() {
 
 	JeagerStatusEnv := os.Getenv("JAEGER_AGENT_ON")
@@ -115,6 +119,9 @@ func main() {
 		zlog.Error().Err(err).Msg("cleanMinioBucket createBucketIfNotExist error")
 	}
 
+	done := make(chan bool)
+	ticker(done)
+
 	forever := make(chan bool)
 
 	// Consume
@@ -157,7 +164,7 @@ func main() {
 
 	log.Printf("Waiting for messages")
 	<-forever
-
+	<-done
 }
 func processend(err error) {
 	if JeagerStatus == true && ctx != nil {
@@ -201,7 +208,8 @@ func processMessage(d amqp.Delivery) error {
 	zlog.Info().Str("fileID", fileID).Str("rebuilt-file-location", input).Str("source-file-location", sourcef).Msg("")
 
 	// Upload the source file to Minio and Get presigned URL
-	sourcePresignedURL, err := minio.UploadAndReturnURL(minioClient, sourceMinioBucket, input, time.Second*60*60*24)
+
+	sourcePresignedURL, err := minio.UploadAndReturnURL(minioClient, sourceMinioBucket, input, presignedUrlExpireIn)
 	if err != nil {
 		return fmt.Errorf("error uploading file from minio : %s", err)
 	}
@@ -281,6 +289,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 
 		}
 	}
+
 	if d.Headers["clean-presigned-url"] == nil ||
 		d.Headers["rebuilt-file-location"] == nil ||
 		d.Headers["reply-to"] == nil {
@@ -292,11 +301,11 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 	outputFileLocation := d.Headers["rebuilt-file-location"].(string)
 	reportFileName := "report.xml"
 
-	SourceFile := fileID
-	CleanFile := fmt.Sprintf("rebuild-%s", fileID)
+	//	SourceFile := fileID
+	//	CleanFile := fmt.Sprintf("rebuild-%s", fileID)
 
-	defer RemoveProcessedFilesMinio(SourceFile, sourceMinioBucket)
-	defer RemoveProcessedFilesMinio(CleanFile, cleanMinioBucket)
+	//defer RemoveProcessedFilesMinio(SourceFile, sourceMinioBucket)
+	//defer RemoveProcessedFilesMinio(CleanFile, cleanMinioBucket)
 
 	publisher, err := rabbitmq.NewQueuePublisher(connection, ProcessingRequestExchange)
 	if err != nil {
