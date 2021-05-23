@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"log"
@@ -320,6 +321,26 @@ func GenerateRandomString(n int) (string, error) {
 }
 
 func TestInject(t *testing.T) {
+	tableout := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	tracer, closer := tracing.Init(thisServiceName)
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+	ProcessTracer = tracer
+
+	var d amqp.Delivery
+	d.Headers = tableout
+	helloTo = d.Headers["file-id"].(string)
+	span := ProcessTracer.StartSpan("ProcessFile")
+	span.SetTag("send-msg", helloTo)
+	defer span.Finish()
+
+	ctx = opentracing.ContextWithSpan(context.Background(), span)
+
 	type args struct {
 		span opentracing.Span
 		hdrs amqp.Table
@@ -329,7 +350,11 @@ func TestInject(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			"Inject",
+			args{span, tableout},
+			false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -349,9 +374,8 @@ func Test_processend(t *testing.T) {
 		name string
 		args args
 	}{
-		// TODO: Add test cases.
 		{
-			"test",
+			"processend",
 			args{fmt.Errorf("Err is: %s", "creat err")},
 		},
 	}
@@ -363,6 +387,27 @@ func Test_processend(t *testing.T) {
 }
 
 func TestExtract(t *testing.T) {
+	tableout := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	tracer, closer := tracing.Init(thisServiceName)
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+	ProcessTracer = tracer
+
+	var d amqp.Delivery
+	d.Headers = tableout
+	helloTo = d.Headers["file-id"].(string)
+	span := ProcessTracer.StartSpan("ProcessFile")
+	span.SetTag("send-msg", helloTo)
+	defer span.Finish()
+
+	ctx = opentracing.ContextWithSpan(context.Background(), span)
+	Inject(span, d.Headers)
+	spanctx, _ := Extract(d.Headers)
 	type args struct {
 		hdrs amqp.Table
 	}
@@ -372,7 +417,12 @@ func TestExtract(t *testing.T) {
 		want    opentracing.SpanContext
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			"Extract",
+			args{tableout},
+			spanctx,
+			false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -389,16 +439,37 @@ func TestExtract(t *testing.T) {
 }
 
 func Test_amqpHeadersCarrier_ForeachKey(t *testing.T) {
+	tableout := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	c := amqpHeadersCarrier(tableout)
+
+	tetsc := c
+
 	type args struct {
 		handler func(key, val string) error
 	}
+	han := args{
+		handler: func(key string, val string) error {
+			return nil
+		},
+	}
+
 	tests := []struct {
 		name    string
 		c       amqpHeadersCarrier
 		args    args
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			"amqpHeadersCarrier",
+			tetsc,
+			han,
+			false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -410,6 +481,28 @@ func Test_amqpHeadersCarrier_ForeachKey(t *testing.T) {
 }
 
 func TestExtractWithTracer(t *testing.T) {
+	tableout := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	tracer, closer := tracing.Init(thisServiceName)
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+	ProcessTracer = tracer
+
+	var d amqp.Delivery
+	d.Headers = tableout
+	helloTo = d.Headers["file-id"].(string)
+	span := ProcessTracer.StartSpan("ProcessFile")
+	span.SetTag("send-msg", helloTo)
+	defer span.Finish()
+
+	ctx = opentracing.ContextWithSpan(context.Background(), span)
+	Inject(span, d.Headers)
+	spanctx, _ := ExtractWithTracer(d.Headers, ProcessTracer)
+
 	type args struct {
 		hdrs   amqp.Table
 		tracer opentracing.Tracer
@@ -420,7 +513,12 @@ func TestExtractWithTracer(t *testing.T) {
 		want    opentracing.SpanContext
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			"ExtractWithTracer",
+			args{tableout, ProcessTracer},
+			spanctx,
+			false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
