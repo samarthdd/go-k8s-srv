@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"time"
 
 	zlog "github.com/rs/zerolog/log"
@@ -11,7 +10,7 @@ import (
 	miniov7 "github.com/minio/minio-go/v7"
 )
 
-func minioRemoveScheduler() {
+func minioRemoveScheduler(bucketName, prefix string) {
 
 	//timer := time.NewTimer(10 * time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -23,8 +22,8 @@ func minioRemoveScheduler() {
 
 	// List all objects from a bucket-name with a matching prefix.
 
-	object = minioClient.ListObjects(ctx, sourceMinioBucket, miniov7.ListObjectsOptions{
-		Prefix:    "",
+	object = minioClient.ListObjects(ctx, bucketName, miniov7.ListObjectsOptions{
+		Prefix:    prefix,
 		Recursive: false,
 	})
 
@@ -32,7 +31,7 @@ func minioRemoveScheduler() {
 		GovernanceBypass: true,
 	}
 
-	for rErr := range minioClient.RemoveObjects(ctx, sourceMinioBucket, object, opts) {
+	for rErr := range minioClient.RemoveObjects(ctx, bucketName, object, opts) {
 		zlog.Error().Err(rErr.Err).Msg("Error detected during deletion")
 	}
 
@@ -48,8 +47,10 @@ func ticker(done <-chan bool) {
 			case <-done:
 				ticker.Stop()
 			case <-ticker.C:
-				log.Println("tick")
-				minioRemoveScheduler()
+				zlog.Info().Msg("the origin files and rebuild file are being deleted")
+				minioRemoveScheduler(sourceMinioBucket, "")
+				minioRemoveScheduler(cleanMinioBucket, "rebuild-")
+
 			}
 		}
 	}()

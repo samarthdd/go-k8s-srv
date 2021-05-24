@@ -18,6 +18,6 @@ func TestMinioRemoveScheduler(t *testing.T) {
 	if err != nil {
 		log.Println("could not s start minio client ")
 	}
-	minioRemoveScheduler()
+	minioRemoveScheduler(sourceMinioBucket, "")
 
 }
