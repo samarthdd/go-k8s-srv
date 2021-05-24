@@ -45,15 +45,6 @@ func jaegerserver() {
 		Repository: "jaegertracing/all-in-one",
 		Tag:        "latest",
 
-		/*
-					 - "5775:5775/udp"
-			        - "6831:6831/udp"
-			        - "6832:6832/udp"
-			        - "5778:5778/tcp"
-			        - "16686:16686"
-			        - "14268:14268"
-			        - "9411:9411"
-		*/
 		PortBindings: map[docker.Port][]docker.PortBinding{
 			"5775/udp": {{HostPort: "5775"}},
 			"6831/udp": {{HostPort: "6831"}},
