@@ -60,10 +60,8 @@ const thisServiceName = "GWFileProcess"
 type amqpHeadersCarrier map[string]interface{}
 
 var ctx context.Context
-
 var ProcessTracer opentracing.Tracer
 var ProcessTracer2 opentracing.Tracer
-
 var helloTo string
 
 func main() {
@@ -74,7 +72,6 @@ func main() {
 	} else {
 		JeagerStatus = false
 	}
-
 	// Get a connection
 	var err error
 
@@ -84,7 +81,6 @@ func main() {
 	}
 
 	// Initiate a publisher on processing exchange
-
 	// Start a consumer
 	msgs, ch, err := rabbitmq.NewQueueConsumer(connection, AdpatationReuquestQueueName, AdpatationReuquestExchange, AdpatationReuquestRoutingKey)
 	if err != nil {
@@ -197,7 +193,6 @@ func processMessage(d amqp.Delivery) error {
 	fileID := d.Headers["file-id"].(string)
 	input := d.Headers["source-file-location"].(string)
 	sourcef := d.Headers["rebuilt-file-location"].(string)
-
 	zlog.Info().Str("fileID", fileID).Str("rebuilt-file-location", input).Str("source-file-location", sourcef).Msg("")
 
 	// Upload the source file to Minio and Get presigned URL
@@ -206,21 +201,15 @@ func processMessage(d amqp.Delivery) error {
 		return fmt.Errorf("error uploading file from minio : %s", err)
 	}
 	zlog.Info().Msg("file uploaded to minio successfully")
-
 	d.Headers["source-presigned-url"] = sourcePresignedURL.String()
-
 	d.Headers["reply-to"] = d.ReplyTo
 	headers := d.Headers
 
 	if JeagerStatus == true {
-		// Inject the span context into the AMQP header.
-		//sp := opentracing.SpanFromContext(ctx)
-		//defer sp.Finish()
 		if err := Inject(span, headers); err != nil {
 			return err
 		}
 	}
-
 	// Publish the details to Rabbit
 	err = rabbitmq.PublishMessage(publisher, ProcessingRequestExchange, ProcessingRequestRoutingKey, headers, []byte(""))
 	if err != nil {
@@ -237,7 +226,6 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 
 		if d.Headers["uber-trace-id"] != nil {
 			fmt.Println("uber-trace-id")
-
 			spCtx, ctxsuberr := ExtractWithTracer(d.Headers, ProcessTracer2)
 			if spCtx == nil {
 				fmt.Println("cpctxsub nil 1")
@@ -245,7 +233,6 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 			if ctxsuberr != nil {
 				fmt.Println(ctxsuberr)
 			}
-
 			// Extract the span context out of the AMQP header.
 			sp := opentracing.StartSpan(
 				"outcomeProcessMessage",
@@ -255,7 +242,6 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 				helloTo = "nil-file-id"
 			} else {
 				helloTo = d.Headers["file-id"].(string)
-
 			}
 			sp.SetTag("file-clean", helloTo)
 			defer sp.Finish()
@@ -263,15 +249,12 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 			defer cancel()
 			// Update the context with the span for the subsequent reference.
 			ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
-
 		} else {
 			fmt.Println("no-uber-trace-id")
-
 			if d.Headers["file-id"] == nil {
 				helloTo = "nil-file-id"
 			} else {
 				helloTo = d.Headers["file-id"].(string)
-
 			}
 			span := ProcessTracer2.StartSpan("outcomeProcessMessage")
 			span.SetTag("msg-procces", helloTo)
@@ -284,7 +267,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 	if d.Headers["clean-presigned-url"] == nil ||
 		d.Headers["rebuilt-file-location"] == nil ||
 		d.Headers["reply-to"] == nil {
-		return fmt.Errorf("Headers value is nil")
+		return fmt.Errorf("headers value is nil")
 	}
 
 	fileID := d.Headers["file-id"].(string)
@@ -302,21 +285,16 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 	if err != nil {
 		return fmt.Errorf("error  starting  adaptation outcome publisher : %s", err)
 	}
-
 	defer publisher.Close()
-
 	// Download the file to output file location
 	if cleanPresignedURL != "" {
 		err = minio.DownloadObject(cleanPresignedURL, outputFileLocation)
 		if err != nil {
-
 			return fmt.Errorf("error downloading  rebuilt file from minio : %s", err)
 		}
-
 		zlog.Info().Msg("rebuilt file downloaded from minio successfully")
 	} else {
 		zlog.Info().Msg("there is no rebuilt file to download from minio")
-
 	}
 
 	if d.Headers["report-presigned-url"] != nil {
@@ -337,27 +315,16 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 		}
 
 	} else {
-
 		zlog.Info().Msg("there is no rebuilt file to download from minio")
-
 	}
-	//{ "file-outcome", Encoding.UTF8.GetBytes("failed") },
-	//{ "file-outcome", Encoding.UTF8.GetBytes("unmodified") },
-	//{ "file-outcome", Encoding.UTF8.GetBytes("failed") },
-
 	d.Headers["file-outcome"] = "replace"
-	// Publish the details to Rabbit
-
-	//because of missmatch configuration in icap-service  , the exchange and routing keys are null
 	AdaptationOutcomeExchange = ""
 	AdaptationOutcomeRoutingKey, _ = d.Headers["reply-to"].(string)
-
 	if JeagerStatus == true && ctx != nil {
 		span, _ := opentracing.StartSpanFromContext(ctx, "AdaptationOutcomeExchange")
 		defer span.Finish()
 		span.LogKV("event", "outcome")
 	}
-
 	err = rabbitmq.PublishMessage(publisher, AdaptationOutcomeExchange, AdaptationOutcomeRoutingKey, d.Headers, []byte(""))
 	if err != nil {
 		return fmt.Errorf("error publish to adaption outcome queue : %s", err)

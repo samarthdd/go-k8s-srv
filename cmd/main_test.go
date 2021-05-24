@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"log"
 	"math/big"
 	"net/http"
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/k8-proxy/go-k8s-srv/tracing"
 	"github.com/k8-proxy/k8-go-comm/pkg/rabbitmq"
 	min7 "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/opentracing/opentracing-go"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"github.com/streadway/amqp"
@@ -22,10 +26,51 @@ var TestMQTable amqp.Table
 var endpoint string
 var ResourceMQ *dockertest.Resource
 var ResourceMinio *dockertest.Resource
+var ResourceJG *dockertest.Resource
+
 var poolMq *dockertest.Pool
 var poolMinio *dockertest.Pool
+var poolJG *dockertest.Pool
+
 var secretsstring string
 
+func jaegerserver() {
+	var errpool error
+
+	poolJG, errpool = dockertest.NewPool("")
+	if errpool != nil {
+		log.Fatalf("Could not connect to docker: %s", errpool)
+	}
+	opts := dockertest.RunOptions{
+		Repository: "jaegertracing/all-in-one",
+		Tag:        "latest",
+
+		/*
+					 - "5775:5775/udp"
+			        - "6831:6831/udp"
+			        - "6832:6832/udp"
+			        - "5778:5778/tcp"
+			        - "16686:16686"
+			        - "14268:14268"
+			        - "9411:9411"
+		*/
+		PortBindings: map[docker.Port][]docker.PortBinding{
+			"5775/udp": {{HostPort: "5775"}},
+			"6831/udp": {{HostPort: "6831"}},
+			"6832/udp": {{HostPort: "6832"}},
+			"5778/tcp": {{HostPort: "5778"}},
+			"16686":    {{HostPort: "16686"}},
+			"14268":    {{HostPort: "14268"}},
+			"9411":     {{HostPort: "9411"}},
+		},
+	}
+	resource, err := poolJG.RunWithOptions(&opts)
+	if err != nil {
+		log.Fatalf("Could not start resource: %s", err.Error())
+	}
+	ResourceJG = resource
+
+}
 func rabbitserver() {
 	var errpool error
 
@@ -100,7 +145,7 @@ func minioserver() {
 
 func TestProcessMessage(t *testing.T) {
 	log.Println("[√] start test")
-	JeagerStatus = false
+	JeagerStatus = true
 	AdpatationReuquestExchange = "adaptation-exchange"
 	AdpatationReuquestRoutingKey = "adaptation-request"
 	AdpatationReuquestQueueName = "adaptation-request-queue"
@@ -128,6 +173,21 @@ func TestProcessMessage(t *testing.T) {
 
 	minioAccessKey = secretsstring
 	minioSecretKey = secretsstring
+	if JeagerStatus == true {
+		jaegerserver()
+		log.Println("[√] create Jaeger  successfully")
+		tracer, closer := tracing.Init(thisServiceName)
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		ProcessTracer = tracer
+		log.Println("[√] create Jaeger ProcessTracer successfully")
+
+		tracer, closer = tracing.Init("outMsgs")
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		ProcessTracer2 = tracer
+		log.Println("[√] create Jaeger ProcessTracer2 successfully")
+	}
 
 	rabbitserver()
 	log.Println("[√] create AMQP  successfully")
@@ -231,12 +291,42 @@ func TestProcessMessage(t *testing.T) {
 
 		}
 	})
+	if JeagerStatus == true {
+
+		t.Run("outcomeProcessMessagewithtrace", func(t *testing.T) {
+			helloTo = d.Headers["file-id"].(string)
+			span := ProcessTracer.StartSpan("ProcessFile")
+			span.SetTag("send-msg", helloTo)
+			defer span.Finish()
+
+			ctx = opentracing.ContextWithSpan(context.Background(), span)
+			if err := Inject(span, tableout); err != nil {
+				t.Errorf("outcomeProcessMessagewithtrace(amqp.Delivery) = %d; want nil", err)
+
+			}
+			testresult := outcomeProcessMessage(dout)
+			if testresult != nil {
+
+				t.Errorf("outcomeProcessMessage(amqp.Delivery) = %d; want nil", testresult)
+
+			} else {
+				log.Println("[√] ProcessMessage successfully")
+
+			}
+		})
+	}
 	// When you're done, kill and remove the container
 	if err = poolMq.Purge(ResourceMQ); err != nil {
 		fmt.Printf("Could not purge resource: %s", err)
 	}
 	if err = poolMinio.Purge(ResourceMinio); err != nil {
 		fmt.Printf("Could not purge resource: %s", err)
+	}
+	if JeagerStatus == true {
+
+		if err = poolJG.Purge(ResourceJG); err != nil {
+			fmt.Printf("Could not purge resource: %s", err)
+		}
 	}
 
 }
@@ -252,4 +342,218 @@ func GenerateRandomString(n int) (string, error) {
 	}
 
 	return string(ret), nil
+}
+
+func TestInject(t *testing.T) {
+	tableout := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	tracer, closer := tracing.Init(thisServiceName)
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+	ProcessTracer = tracer
+
+	var d amqp.Delivery
+	d.Headers = tableout
+	helloTo = d.Headers["file-id"].(string)
+	span := ProcessTracer.StartSpan("ProcessFile")
+	span.SetTag("send-msg", helloTo)
+	defer span.Finish()
+
+	ctx = opentracing.ContextWithSpan(context.Background(), span)
+
+	type args struct {
+		span opentracing.Span
+		hdrs amqp.Table
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			"Inject",
+			args{span, tableout},
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := Inject(tt.args.span, tt.args.hdrs); (err != nil) != tt.wantErr {
+				t.Errorf("Inject() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func Test_processend(t *testing.T) {
+
+	type args struct {
+		err error
+	}
+	tests := []struct {
+		name string
+		args args
+	}{
+		{
+			"processend",
+			args{fmt.Errorf("Err is: %s", "creat err")},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processend(tt.args.err)
+		})
+	}
+}
+
+func TestExtract(t *testing.T) {
+	tableout := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	tracer, closer := tracing.Init(thisServiceName)
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+	ProcessTracer = tracer
+
+	var d amqp.Delivery
+	d.Headers = tableout
+	helloTo = d.Headers["file-id"].(string)
+	span := ProcessTracer.StartSpan("ProcessFile")
+	span.SetTag("send-msg", helloTo)
+	defer span.Finish()
+
+	ctx = opentracing.ContextWithSpan(context.Background(), span)
+	Inject(span, d.Headers)
+	spanctx, _ := Extract(d.Headers)
+	type args struct {
+		hdrs amqp.Table
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    opentracing.SpanContext
+		wantErr bool
+	}{
+		{
+			"Extract",
+			args{tableout},
+			spanctx,
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Extract(tt.args.hdrs)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Extract() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Extract() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_amqpHeadersCarrier_ForeachKey(t *testing.T) {
+	tableout := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	c := amqpHeadersCarrier(tableout)
+
+	tetsc := c
+
+	type args struct {
+		handler func(key, val string) error
+	}
+	han := args{
+		handler: func(key string, val string) error {
+			return nil
+		},
+	}
+
+	tests := []struct {
+		name    string
+		c       amqpHeadersCarrier
+		args    args
+		wantErr bool
+	}{
+		{
+			"amqpHeadersCarrier",
+			tetsc,
+			han,
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.c.ForeachKey(tt.args.handler); (err != nil) != tt.wantErr {
+				t.Errorf("amqpHeadersCarrier.ForeachKey() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestExtractWithTracer(t *testing.T) {
+	tableout := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	tracer, closer := tracing.Init(thisServiceName)
+	defer closer.Close()
+	opentracing.SetGlobalTracer(tracer)
+	ProcessTracer = tracer
+
+	var d amqp.Delivery
+	d.Headers = tableout
+	helloTo = d.Headers["file-id"].(string)
+	span := ProcessTracer.StartSpan("ProcessFile")
+	span.SetTag("send-msg", helloTo)
+	defer span.Finish()
+
+	ctx = opentracing.ContextWithSpan(context.Background(), span)
+	Inject(span, d.Headers)
+	spanctx, _ := ExtractWithTracer(d.Headers, ProcessTracer)
+
+	type args struct {
+		hdrs   amqp.Table
+		tracer opentracing.Tracer
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    opentracing.SpanContext
+		wantErr bool
+	}{
+		{
+			"ExtractWithTracer",
+			args{tableout, ProcessTracer},
+			spanctx,
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ExtractWithTracer(tt.args.hdrs, tt.args.tracer)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ExtractWithTracer() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ExtractWithTracer() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
