@@ -291,7 +291,8 @@ func TestProcessMessage(t *testing.T) {
 
 		}
 	})
-	if JeagerStatus {
+	if JeagerStatus == true {
+
 		t.Run("outcomeProcessMessagewithtrace", func(t *testing.T) {
 			helloTo = d.Headers["file-id"].(string)
 			span := ProcessTracer.StartSpan("ProcessFile")
