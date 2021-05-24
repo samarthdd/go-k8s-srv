@@ -39,7 +39,7 @@ func minioRemoveScheduler(bucketName, prefix string) {
 
 func ticker(done <-chan bool) {
 
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(10 * time.Minute)
 
 	go func() {
 		for {
