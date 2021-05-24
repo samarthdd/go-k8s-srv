@@ -9,12 +9,12 @@ import (
 
 func TestMinioRemoveScheduler(t *testing.T) {
 	var err error
+	if minioEndpoint != "" {
+		minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, false)
 
-	minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, false)
-
-	if err != nil {
-		log.Println("could not s start minio client ")
+		if err != nil {
+			log.Println("could not s start minio client ")
+		}
+		minioRemoveScheduler(sourceMinioBucket, "")
 	}
-	minioRemoveScheduler(sourceMinioBucket, "")
-
 }
