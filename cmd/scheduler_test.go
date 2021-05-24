@@ -9,10 +9,7 @@ import (
 
 func TestMinioRemoveScheduler(t *testing.T) {
 	var err error
-	minioEndpoint := "localhost:9000"
-	minioAccessKey := "minioadmin"
-	minioSecretKey := "minioadmin"
-	sourceMinioBucket = "test"
+
 	minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, false)
 
 	if err != nil {
