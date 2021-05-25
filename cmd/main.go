@@ -273,15 +273,9 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 		}
 	}
 
-	if d.Headers["clean-presigned-url"] == nil ||
-		d.Headers["rebuilt-file-location"] == nil ||
-		d.Headers["reply-to"] == nil {
-		return fmt.Errorf("headers value is nil")
-	}
-
 	fileID := d.Headers["file-id"].(string)
-	cleanPresignedURL := d.Headers["clean-presigned-url"].(string)
-	outputFileLocation := d.Headers["rebuilt-file-location"].(string)
+	cleanPresignedURL, _ := d.Headers["clean-presigned-url"].(string)
+	outputFileLocation, _ := d.Headers["rebuilt-file-location"].(string)
 	reportFileName := "report.xml"
 
 	publisher, err := rabbitmq.NewQueuePublisher(connection, ProcessingRequestExchange)
