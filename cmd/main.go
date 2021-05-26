@@ -277,6 +277,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 	cleanPresignedURL, _ := d.Headers["clean-presigned-url"].(string)
 	outputFileLocation, _ := d.Headers["rebuilt-file-location"].(string)
 	reportFileName := "report.xml"
+	metadataFileName := "metadata.json"
 
 	publisher, err := rabbitmq.NewQueuePublisher(connection, ProcessingRequestExchange)
 	if err != nil {
@@ -314,6 +315,28 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 	} else {
 		zlog.Info().Msg("there is no rebuilt file to download from minio")
 	}
+
+	if d.Headers["metadata-presigned-url"] != nil {
+		metadataPresignedURL, _ := d.Headers["metadata-presigned-url"].(string)
+		metadataPath := fmt.Sprintf("%s/%s", transactionStorePath, fileID)
+
+		if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
+			os.MkdirAll(metadataPath, 0777)
+		}
+
+		metadataFileLocation := fmt.Sprintf("%s/%s", metadataPath, metadataFileName)
+
+		zlog.Info().Str("metadata file location ", metadataFileLocation).Msg("")
+
+		err := minio.DownloadObject(metadataPresignedURL, metadataFileLocation)
+		if err != nil {
+			return err
+		}
+
+	} else {
+		zlog.Info().Msg("there is no rebuilt file to download from minio")
+	}
+
 	d.Headers["file-outcome"] = "replace"
 	AdaptationOutcomeExchange = ""
 	AdaptationOutcomeRoutingKey, _ = d.Headers["reply-to"].(string)
