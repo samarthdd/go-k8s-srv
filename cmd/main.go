@@ -313,7 +313,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 		}
 
 	} else {
-		zlog.Info().Msg("there is no rebuilt file to download from minio")
+		zlog.Info().Msg("there is no report file to download from minio")
 	}
 
 	if d.Headers["metadata-presigned-url"] != nil {
@@ -334,7 +334,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 		}
 
 	} else {
-		zlog.Info().Msg("there is no rebuilt file to download from minio")
+		zlog.Info().Msg("there is no metadajson file to download from minio")
 	}
 
 	d.Headers["file-outcome"] = "replace"
