@@ -337,7 +337,9 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 		zlog.Info().Msg("there is no metadata file to download from minio")
 	}
 
-	d.Headers["file-outcome"] = "replace"
+	fileOutcome, _ := d.Headers["file-outcome"].(string)
+	log.Printf("\033[35m rebuild status is  : %s\n", fileOutcome)
+
 	AdaptationOutcomeExchange = ""
 	AdaptationOutcomeRoutingKey, _ = d.Headers["reply-to"].(string)
 	if JeagerStatus == true && ctx != nil {
