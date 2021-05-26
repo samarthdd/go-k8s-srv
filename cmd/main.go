@@ -334,7 +334,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 		}
 
 	} else {
-		zlog.Info().Msg("there is no metadajson file to download from minio")
+		zlog.Info().Msg("there is no metadata file to download from minio")
 	}
 
 	d.Headers["file-outcome"] = "replace"
