@@ -78,7 +78,7 @@ func main() {
 	}
 
 	if transactionStorePath == "" {
-		transactionStorePath = "/mnt/stores/transactions"
+		zlog.Fatal().Msg("TRANSACTION_STORE_PATH is not configured ")
 	}
 	// Get a connection
 	var err error
