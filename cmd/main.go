@@ -356,7 +356,10 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 		return fmt.Errorf("error publish to adaption outcome queue : %s", err)
 	}
 	zlog.Info().Str("Exchange", AdaptationOutcomeExchange).Str("RoutingKey", AdaptationOutcomeRoutingKey).Msg("message published to queue ")
-
+	err = rabbitmq.PublishMessage(publisher, "comparison-request-exchange", "comparison-request", d.Headers, []byte(""))
+	if err != nil {
+		return fmt.Errorf("error publish to comparison request queue : %s", err)
+	}
 	return nil
 }
 
