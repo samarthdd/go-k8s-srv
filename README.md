@@ -69,6 +69,8 @@ docker run -d --hostname <host_name> --name <container_name> -p 15672:15672 -p 5
 
 - To run the container
 note to activate Jaeger trace set JAEGER_AGENT_ON=true
+note to activate Jaeger trace set TIKA_COMPARISON_ON=true
+
 
 ```
 docker run -e ADAPTATION_REQUEST_QUEUE_HOSTNAME='<rabbit-host>' \
@@ -84,6 +86,7 @@ docker run -e ADAPTATION_REQUEST_QUEUE_HOSTNAME='<rabbit-host>' \
 -e JAEGER_AGENT_HOST='<jaeger-host>' \
 -e JAEGER_AGENT_PORT='<jaeger-port>' \
 -e JAEGER_AGENT_ON=true \
+-e TIKA_COMPARISON_ON=true \
 --name <docker_container_name> <docker_image_name>
 ```
 

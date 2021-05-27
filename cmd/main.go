@@ -42,17 +42,19 @@ var (
 	messagebrokeruser              = os.Getenv("MESSAGE_BROKER_USER")
 	messagebrokerpassword          = os.Getenv("MESSAGE_BROKER_PASSWORD")
 
-	minioEndpoint     = os.Getenv("MINIO_ENDPOINT")
-	minioAccessKey    = os.Getenv("MINIO_ACCESS_KEY")
-	minioSecretKey    = os.Getenv("MINIO_SECRET_KEY")
-	sourceMinioBucket = os.Getenv("MINIO_SOURCE_BUCKET")
-	cleanMinioBucket  = os.Getenv("MINIO_CLEAN_BUCKET")
+	TikaRequestExange           = "comparison-request-exchange"
+	ComparisonRequestRoutingKey = "comparison-request"
 
+	minioEndpoint        = os.Getenv("MINIO_ENDPOINT")
+	minioAccessKey       = os.Getenv("MINIO_ACCESS_KEY")
+	minioSecretKey       = os.Getenv("MINIO_SECRET_KEY")
+	sourceMinioBucket    = os.Getenv("MINIO_SOURCE_BUCKET")
+	cleanMinioBucket     = os.Getenv("MINIO_CLEAN_BUCKET")
 	transactionStorePath = os.Getenv("TRANSACTION_STORE_PATH")
-
-	minioClient  *miniov7.Client
-	connection   *amqp.Connection
-	JeagerStatus bool
+	minioClient          *miniov7.Client
+	connection           *amqp.Connection
+	JeagerStatus         bool
+	tikasataus           bool
 )
 
 const thisServiceName = "GWFileProcess"
@@ -76,6 +78,13 @@ func main() {
 	} else {
 		JeagerStatus = false
 	}
+	tikasatausenv := os.Getenv("TIKA_COMPARISON_ON")
+	if tikasatausenv == "true" {
+		tikasataus = true
+	} else {
+		tikasataus = false
+	}
+
 	// Get a connection
 	var err error
 
@@ -299,8 +308,15 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 	} else {
 		zlog.Info().Msg("there is no rebuilt file to download from minio")
 	}
+	if tikasataus {
+		err = rabbitmq.PublishMessage(publisher, TikaRequestExange, ComparisonRequestRoutingKey, d.Headers, []byte(""))
+		if err != nil {
+			return fmt.Errorf("error publish to comparison request queue : %s", err)
+		}
+	}
 
 	if d.Headers["report-presigned-url"] != nil {
+
 		reportPresignedURL, _ := d.Headers["report-presigned-url"].(string)
 		reportPath := fmt.Sprintf("%s/%s", transactionStorePath, fileID)
 
@@ -333,10 +349,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 		return fmt.Errorf("error publish to adaption outcome queue : %s", err)
 	}
 	zlog.Info().Str("Exchange", AdaptationOutcomeExchange).Str("RoutingKey", AdaptationOutcomeRoutingKey).Msg("message published to queue ")
-	err = rabbitmq.PublishMessage(publisher, "comparison-request-exchange", "comparison-request", d.Headers, []byte(""))
-	if err != nil {
-		return fmt.Errorf("error publish to comparison request queue : %s", err)
-	}
+
 	return nil
 }
 
