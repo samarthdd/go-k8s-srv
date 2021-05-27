@@ -76,6 +76,10 @@ func main() {
 	} else {
 		JeagerStatus = false
 	}
+
+	if transactionStorePath == "" {
+		transactionStorePath = "/mnt/stores/transactions"
+	}
 	// Get a connection
 	var err error
 
