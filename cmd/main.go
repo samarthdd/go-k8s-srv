@@ -71,13 +71,6 @@ const (
 )
 
 func main() {
-
-	JeagerStatusEnv := os.Getenv("JAEGER_AGENT_ON")
-	if JeagerStatusEnv == "true" {
-		JeagerStatus = true
-	} else {
-		JeagerStatus = false
-	}
 	tikasatausenv := os.Getenv("TIKA_COMPARISON_ON")
 	if tikasatausenv == "true" {
 		tikasataus = true
@@ -85,6 +78,12 @@ func main() {
 		tikasataus = false
 	}
 
+	JeagerStatusEnv := os.Getenv("JAEGER_AGENT_ON")
+	if JeagerStatusEnv == "true" {
+		JeagerStatus = true
+	} else {
+		JeagerStatus = false
+	}
 	// Get a connection
 	var err error
 
