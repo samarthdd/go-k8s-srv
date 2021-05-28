@@ -69,7 +69,7 @@ docker run -d --hostname <host_name> --name <container_name> -p 15672:15672 -p 5
 
 - To run the container
 note to activate Jaeger trace set JAEGER_AGENT_ON=true
-note to activate Jaeger trace set TIKA_COMPARISON_ON=true
+note to activate TIKA trace set TIKA_COMPARISON_ON=true
 
 
 ```
