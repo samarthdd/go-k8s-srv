@@ -1,5 +1,5 @@
 name: codecov
-on: [push]
+on: [push, pull_request]
 jobs:
   codecov:
     name: codecov
@@ -23,7 +23,6 @@ jobs:
           fi
       - name: TestCov
         run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
-
       - name: Upload coverage report
         uses: codecov/codecov-action@v1.2.2
         with:
