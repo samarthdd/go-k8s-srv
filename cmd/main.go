@@ -197,7 +197,7 @@ func processMessage(d amqp.Delivery) error {
 	if JeagerStatus == true {
 		helloTo = d.Headers["file-id"].(string)
 		span = ProcessTracer.StartSpan("ProcessFile")
-		span.SetTag("send-msg", helloTo)
+		span.SetTag("file-id", helloTo)
 		defer span.Finish()
 
 		ctx = opentracing.ContextWithSpan(context.Background(), span)
@@ -265,7 +265,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 			}
 			sp.SetTag("file-clean", helloTo)
 			defer sp.Finish()
-			ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
 			defer cancel()
 			// Update the context with the span for the subsequent reference.
 			ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
@@ -277,7 +277,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 				helloTo = d.Headers["file-id"].(string)
 			}
 			span := ProcessTracer2.StartSpan("outcomeProcessMessage")
-			span.SetTag("msg-procces", helloTo)
+			span.SetTag("file-id", helloTo)
 			defer span.Finish()
 
 			ctx = opentracing.ContextWithSpan(context.Background(), span)
