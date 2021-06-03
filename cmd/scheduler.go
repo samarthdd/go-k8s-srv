@@ -26,7 +26,7 @@ func minioRemoveScheduler(bucketName, prefix string) {
 
 	object = minioClient.ListObjects(ctx, bucketName, miniov7.ListObjectsOptions{
 		Prefix:    prefix,
-		Recursive: false,
+		Recursive: true,
 	})
 
 	opts := minio.RemoveObjectsOptions{
