@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"strconv"
 	"time"
 
 	zlog "github.com/rs/zerolog/log"
@@ -38,8 +40,9 @@ func minioRemoveScheduler(bucketName, prefix string) {
 }
 
 func ticker(done <-chan bool) {
+	tickerDuration := tickerConf(os.Getenv("MINIO_DELETE_FILE_DURATION"))
 
-	ticker := time.NewTicker(10 * time.Minute)
+	ticker := time.NewTicker(tickerDuration)
 
 	go func() {
 		for {
@@ -49,7 +52,7 @@ func ticker(done <-chan bool) {
 			case <-ticker.C:
 				zlog.Info().Msg("the origin files and rebuild file are being deleted")
 				minioRemoveScheduler(sourceMinioBucket, "")
-				minioRemoveScheduler(cleanMinioBucket, "rebuild-")
+				minioRemoveScheduler(cleanMinioBucket, "")
 
 			}
 		}
@@ -57,7 +60,20 @@ func ticker(done <-chan bool) {
 
 }
 
-func syncher() {
-	//block upload to minio source bucket until all the files deleted
-	//sleep for 2 seconds for a secuity reason
+func tickerConf(d string) time.Duration {
+	defaultTickerDuration := 30 * time.Minute
+	oneYear := 60 * 24 * 365 * time.Minute
+
+	i, err := strconv.Atoi(d)
+	if err != nil {
+		return defaultTickerDuration
+	}
+	if i > 0 {
+		dur := time.Duration(i) * time.Minute
+		return dur
+	}
+	if i < 1 {
+		return oneYear
+	}
+	return defaultTickerDuration
 }
