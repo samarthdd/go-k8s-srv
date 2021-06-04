@@ -135,12 +135,7 @@ func main() {
 	// Consume
 	go func() {
 		for d := range msgs {
-			if JeagerStatus == true {
-				tracer, closer := tracing.Init(thisServiceName)
-				defer closer.Close()
-				opentracing.SetGlobalTracer(tracer)
-				ProcessTracer = tracer
-			}
+
 			zlog.Info().Msg("adaptation request consumer  received message from queue ")
 
 			err := processMessage(d)
@@ -153,12 +148,7 @@ func main() {
 
 	go func() {
 		for d := range outMsgs {
-			if JeagerStatus == true {
-				tracer, closer := tracing.Init("outMsgs")
-				defer closer.Close()
-				opentracing.SetGlobalTracer(tracer)
-				ProcessTracer2 = tracer
-			}
+
 			zlog.Info().Msg(" processingOutcome consumer received message from queue ")
 
 			err := outcomeProcessMessage(d)
@@ -186,6 +176,12 @@ func processend(err error) {
 }
 
 func processMessage(d amqp.Delivery) error {
+	if JeagerStatus == true {
+		tracer, closer := tracing.Init(thisServiceName)
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		ProcessTracer = tracer
+	}
 
 	if d.Headers["file-id"] == nil ||
 		d.Headers["source-file-location"] == nil ||
@@ -242,6 +238,12 @@ func processMessage(d amqp.Delivery) error {
 }
 
 func outcomeProcessMessage(d amqp.Delivery) error {
+	if JeagerStatus == true {
+		tracer, closer := tracing.Init("outMsgs")
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		ProcessTracer2 = tracer
+	}
 	if JeagerStatus == true {
 
 		if d.Headers["uber-trace-id"] != nil {
