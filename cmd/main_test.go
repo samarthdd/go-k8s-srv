@@ -380,27 +380,6 @@ func TestInject(t *testing.T) {
 	}
 }
 
-func Test_processend(t *testing.T) {
-
-	type args struct {
-		err error
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			"processend",
-			args{fmt.Errorf("Err is: %s", "creat err")},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			processend(tt.args.err)
-		})
-	}
-}
-
 func TestExtract(t *testing.T) {
 	tableout := amqp.Table{
 		"file-id":               "id-test",
