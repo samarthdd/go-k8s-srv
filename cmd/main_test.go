@@ -195,6 +195,11 @@ func TestProcessMessage(t *testing.T) {
 	if err != nil {
 		log.Fatalf("[x] AMQP connrecive error: %s", err)
 	}
+	connsend, err = amqp.Dial("amqp://localhost:5672")
+	if err != nil {
+		log.Fatalf("[x] AMQP connrecive error: %s", err)
+	}
+
 	log.Println("[√] AMQP Connected successfully")
 	defer connrecive.Close()
 	// now we can instantiate minio client
