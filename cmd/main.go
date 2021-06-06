@@ -52,7 +52,8 @@ var (
 	cleanMinioBucket     = os.Getenv("MINIO_CLEAN_BUCKET")
 	transactionStorePath = os.Getenv("TRANSACTION_STORE_PATH")
 	minioClient          *miniov7.Client
-	connection           *amqp.Connection
+	connrecive           *amqp.Connection
+	connsend             *amqp.Connection
 	JeagerStatus         bool
 	tikasataus           bool
 )
@@ -92,20 +93,25 @@ func main() {
 	// Get a connection
 	var err error
 
-	connection, err = rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
+	connrecive, err = rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("could not start rabbitmq connection ")
 	}
 
 	// Initiate a publisher on processing exchange
 	// Start a consumer
-	msgs, ch, err := rabbitmq.NewQueueConsumer(connection, AdpatationReuquestQueueName, AdpatationReuquestExchange, AdpatationReuquestRoutingKey)
+	msgs, ch, err := rabbitmq.NewQueueConsumer(connrecive, AdpatationReuquestQueueName, AdpatationReuquestExchange, AdpatationReuquestRoutingKey)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("could not start  AdpatationReuquest consumer ")
 	}
 	defer ch.Close()
 
-	outMsgs, outChannel, err := rabbitmq.NewQueueConsumer(connection, ProcessingOutcomeQueueName, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey)
+	connsend, err = rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
+	if err != nil {
+		zlog.Fatal().Err(err).Msg("could not start rabbitmq connection ")
+	}
+
+	outMsgs, outChannel, err := rabbitmq.NewQueueConsumer(connsend, ProcessingOutcomeQueueName, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("could not start ProcessingOutcome consumer ")
 
@@ -333,7 +339,7 @@ func processMessage(d amqp.Delivery) error {
 		ctx = opentracing.ContextWithSpan(context.Background(), span)
 	}
 
-	publisher, err := rabbitmq.NewQueuePublisher(connection, ProcessingRequestExchange)
+	publisher, err := rabbitmq.NewQueuePublisher(connrecive, ProcessingRequestExchange)
 	if err != nil {
 		return fmt.Errorf("error  starting  Processing Request publisher : %s", err)
 	}
@@ -426,7 +432,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 	reportFileName := "report.xml"
 	metadataFileName := "metadata.json"
 
-	publisher, err := rabbitmq.NewQueuePublisher(connection, ProcessingRequestExchange)
+	publisher, err := rabbitmq.NewQueuePublisher(connsend, ProcessingRequestExchange)
 	if err != nil {
 		return fmt.Errorf("error  starting  adaptation outcome publisher : %s", err)
 	}

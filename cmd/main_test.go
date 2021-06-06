@@ -189,13 +189,19 @@ func TestProcessMessage(t *testing.T) {
 	time.Sleep(40 * time.Second)
 
 	var err error
-	// Get a connection //rabbitmq
-	connection, err = amqp.Dial("amqp://localhost:5672")
+	// Get a connrecive //rabbitmq
+
+	connrecive, err = amqp.Dial("amqp://localhost:5672")
 	if err != nil {
-		log.Fatalf("[x] AMQP connection error: %s", err)
+		log.Fatalf("[x] AMQP connrecive error: %s", err)
 	}
+	connsend, err = amqp.Dial("amqp://localhost:5672")
+	if err != nil {
+		log.Fatalf("[x] AMQP connrecive error: %s", err)
+	}
+
 	log.Println("[√] AMQP Connected successfully")
-	defer connection.Close()
+	defer connrecive.Close()
 	// now we can instantiate minio client
 	minioClient, err = min7.New(endpoint, &min7.Options{
 		Creds:  credentials.NewStaticV4(minioAccessKey, minioSecretKey, ""),
@@ -207,14 +213,14 @@ func TestProcessMessage(t *testing.T) {
 	}
 	log.Println("[√] create minio client successfully")
 	// Start a consumer
-	_, ch, err := rabbitmq.NewQueueConsumer(connection, AdpatationReuquestQueueName, AdpatationReuquestExchange, AdpatationReuquestRoutingKey)
+	_, ch, err := rabbitmq.NewQueueConsumer(connrecive, AdpatationReuquestQueueName, AdpatationReuquestExchange, AdpatationReuquestRoutingKey)
 	if err != nil {
 		log.Fatalf("[x] could not start  AdpatationReuquest consumer error: %s", err)
 	}
 	log.Println("[√] create start  Adpatation Reuquest consumer successfully")
 	defer ch.Close()
 
-	_, outChannel, err := rabbitmq.NewQueueConsumer(connection, ProcessingOutcomeQueueName, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey)
+	_, outChannel, err := rabbitmq.NewQueueConsumer(connrecive, ProcessingOutcomeQueueName, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey)
 	if err != nil {
 		log.Fatalf("[x] Failed to create consumer error: %s", err)
 
