@@ -69,7 +69,7 @@ var helloTo string
 var parentspan opentracing.Span
 
 const (
-	presignedUrlExpireIn = time.Hour * 24
+	presignedUrlExpireIn = time.Minute * 10
 )
 
 func main() {
