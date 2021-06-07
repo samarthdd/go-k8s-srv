@@ -87,6 +87,7 @@ docker run -e ADAPTATION_REQUEST_QUEUE_HOSTNAME='<rabbit-host>' \
 -e JAEGER_AGENT_PORT='<jaeger-port>' \
 -e JAEGER_AGENT_ON=true \
 -e TIKA_COMPARISON_ON=true \
+-e MINIO_DELETE_FILE_DURATION='< 0 for infinites duration  , other X numbers for X minutes duration >'  
 --name <docker_container_name> <docker_image_name>
 ```
 
