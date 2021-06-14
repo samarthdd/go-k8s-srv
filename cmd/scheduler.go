@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -15,25 +16,40 @@ import (
 func minioRemoveScheduler(bucketName, prefix string) {
 
 	//timer := time.NewTimer(10 * time.Second)
+	now := time.Now()
+	Lastmodified := tickerConf(os.Getenv("MINIO_DELETE_FILE_DURATION"))
+	then := now.Add(time.Duration(-Lastmodified))
 	ctx, cancel := context.WithCancel(context.Background())
 
 	defer cancel()
 
 	// Send object names that are needed to be removed to objectsCh
-	var object <-chan miniov7.ObjectInfo
+	objectsCh := make(chan miniov7.ObjectInfo)
 
-	// List all objects from a bucket-name with a matching prefix.
+	// Send object names that are needed to be removed to objectsCh
+	go func() {
+		defer close(objectsCh)
+		// List all objects from a bucket-name with a matching prefix.
+		for object := range minioClient.ListObjects(ctx, "test", miniov7.ListObjectsOptions{
+			Prefix:    "",
+			Recursive: true,
+		}) {
+			if object.Err != nil {
+				log.Fatalln(object.Err)
+			}
+			// filter LastModified
+			if object.LastModified.Before(then) == true {
+				objectsCh <- object
+			}
+		}
 
-	object = minioClient.ListObjects(ctx, bucketName, miniov7.ListObjectsOptions{
-		Prefix:    prefix,
-		Recursive: true,
-	})
+	}()
 
 	opts := minio.RemoveObjectsOptions{
 		GovernanceBypass: true,
 	}
 
-	for rErr := range minioClient.RemoveObjects(ctx, bucketName, object, opts) {
+	for rErr := range minioClient.RemoveObjects(ctx, bucketName, objectsCh, opts) {
 		zlog.Error().Err(rErr.Err).Msg("Error detected during deletion")
 	}
 
