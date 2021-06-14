@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"strconv"
 	"time"
 
@@ -34,7 +33,7 @@ func minioRemoveScheduler(bucketName, prefix string) {
 			Recursive: true,
 		}) {
 			if object.Err != nil {
-				log.Fatalln(object.Err)
+				zlog.Error().Err(object.Err).Msg("Error detected object during deletion")
 			}
 			// filter LastModified
 			if object.LastModified.Before(then) == true {
