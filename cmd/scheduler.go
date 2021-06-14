@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"os"
 	"strconv"
 	"time"
 
@@ -17,7 +16,7 @@ func minioRemoveScheduler(bucketName, prefix string) {
 
 	//timer := time.NewTimer(10 * time.Second)
 	now := time.Now()
-	Lastmodified := tickerConf(os.Getenv("MINIO_DELETE_FILE_DURATION"))
+	Lastmodified := tickerConf(DeleteDuration)
 	then := now.Add(time.Duration(-Lastmodified))
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -56,8 +55,7 @@ func minioRemoveScheduler(bucketName, prefix string) {
 }
 
 func ticker(done <-chan bool) {
-	tickerDuration := tickerConf(os.Getenv("MINIO_DELETE_FILE_DURATION"))
-
+	tickerDuration := tickerConf(DeleteDuration)
 	ticker := time.NewTicker(tickerDuration)
 
 	go func() {
