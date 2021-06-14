@@ -51,6 +51,7 @@ var (
 	sourceMinioBucket    = os.Getenv("MINIO_SOURCE_BUCKET")
 	cleanMinioBucket     = os.Getenv("MINIO_CLEAN_BUCKET")
 	transactionStorePath = os.Getenv("TRANSACTION_STORE_PATH")
+	DeleteDuration       = os.Getenv("MINIO_DELETE_FILE_DURATION")
 	minioClient          *miniov7.Client
 	connrecive           *amqp.Connection
 	connsend             *amqp.Connection
