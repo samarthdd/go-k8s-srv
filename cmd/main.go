@@ -51,8 +51,10 @@ var (
 	sourceMinioBucket    = os.Getenv("MINIO_SOURCE_BUCKET")
 	cleanMinioBucket     = os.Getenv("MINIO_CLEAN_BUCKET")
 	transactionStorePath = os.Getenv("TRANSACTION_STORE_PATH")
+	DeleteDuration       = os.Getenv("MINIO_DELETE_FILE_DURATION")
 	minioClient          *miniov7.Client
-	connection           *amqp.Connection
+	connrecive           *amqp.Connection
+	connsend             *amqp.Connection
 	JeagerStatus         bool
 	tikasataus           bool
 )
@@ -65,9 +67,10 @@ var ctx context.Context
 var ProcessTracer opentracing.Tracer
 var ProcessTracer2 opentracing.Tracer
 var helloTo string
+var parentspan opentracing.Span
 
 const (
-	presignedUrlExpireIn = time.Hour * 24
+	presignedUrlExpireIn = time.Minute * 10
 )
 
 func main() {
@@ -91,20 +94,25 @@ func main() {
 	// Get a connection
 	var err error
 
-	connection, err = rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
+	connrecive, err = rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("could not start rabbitmq connection ")
 	}
 
 	// Initiate a publisher on processing exchange
 	// Start a consumer
-	msgs, ch, err := rabbitmq.NewQueueConsumer(connection, AdpatationReuquestQueueName, AdpatationReuquestExchange, AdpatationReuquestRoutingKey)
+	msgs, ch, err := rabbitmq.NewQueueConsumer(connrecive, AdpatationReuquestQueueName, AdpatationReuquestExchange, AdpatationReuquestRoutingKey)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("could not start  AdpatationReuquest consumer ")
 	}
 	defer ch.Close()
 
-	outMsgs, outChannel, err := rabbitmq.NewQueueConsumer(connection, ProcessingOutcomeQueueName, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey)
+	connsend, err = rabbitmq.NewInstance(adaptationRequestQueueHostname, adaptationRequestQueuePort, messagebrokeruser, messagebrokerpassword)
+	if err != nil {
+		zlog.Fatal().Err(err).Msg("could not start rabbitmq connection ")
+	}
+
+	outMsgs, outChannel, err := rabbitmq.NewQueueConsumer(connsend, ProcessingOutcomeQueueName, ProcessingOutcomeExchange, ProcessingOutcomeRoutingKey)
 	if err != nil {
 		zlog.Fatal().Err(err).Msg("could not start ProcessingOutcome consumer ")
 
@@ -135,17 +143,15 @@ func main() {
 	// Consume
 	go func() {
 		for d := range msgs {
-			if JeagerStatus == true {
-				tracer, closer := tracing.Init(thisServiceName)
-				defer closer.Close()
-				opentracing.SetGlobalTracer(tracer)
-				ProcessTracer = tracer
-			}
+
 			zlog.Info().Msg("adaptation request consumer  received message from queue ")
 
 			err := processMessage(d)
+			if JeagerStatus == true {
+				processend(err, d)
+			}
 			if err != nil {
-				processend(err)
+
 				zlog.Error().Err(err).Msg("error adaptationRequest consumer Failed to process message")
 			}
 		}
@@ -153,18 +159,15 @@ func main() {
 
 	go func() {
 		for d := range outMsgs {
-			if JeagerStatus == true {
-				tracer, closer := tracing.Init("outMsgs")
-				defer closer.Close()
-				opentracing.SetGlobalTracer(tracer)
-				ProcessTracer2 = tracer
-			}
+
 			zlog.Info().Msg(" processingOutcome consumer received message from queue ")
 
 			err := outcomeProcessMessage(d)
-
+			if JeagerStatus == true {
+				processendoutcome(err, d)
+			}
 			if err != nil {
-				processend(err)
+
 				zlog.Error().Err(err).Msg("error processingOutcome consumer Failed to process message")
 			}
 		}
@@ -174,18 +177,151 @@ func main() {
 	<-forever
 	<-done
 }
-func processend(err error) {
+func processend(err error, d amqp.Delivery) {
 	if JeagerStatus == true && ctx != nil {
-		fmt.Println(err)
 
-		span, _ := opentracing.StartSpanFromContext(ctx, "ProcessingEndError")
+		if err != nil {
+			if d.Headers["uber-trace-id"] == nil {
+				headers := d.Headers
+				Inject(parentspan, headers)
+
+			}
+
+			tracer, closer := tracing.Init("error-Income")
+			defer closer.Close()
+			opentracing.SetGlobalTracer(tracer)
+			spCtx, ctxsuberr := ExtractWithTracer(d.Headers, ProcessTracer)
+			if ctxsuberr != nil {
+				zlog.Error().Err(ctxsuberr).Msg("error Jaeger Extract With Tracer")
+			}
+			sp := opentracing.StartSpan(
+				"Income-error",
+				opentracing.FollowsFrom(spCtx),
+			)
+			if d.Headers["file-id"] == nil {
+				helloTo = "nil-file-id"
+			} else {
+				helloTo = d.Headers["file-id"].(string)
+
+			}
+			sp.SetTag("file-id", helloTo)
+			defer sp.Finish()
+			ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
+			defer cancel()
+			// Update the context with the span for the subsequent reference.
+			ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
+
+			span, _ := opentracing.StartSpanFromContext(ctx, "IncomeEnderror")
+			defer span.Finish()
+
+			span.LogKV("error", "true")
+			span.LogKV("error-msg", err)
+		} else {
+
+			tracer, closer := tracing.Init("successful-Income")
+			defer closer.Close()
+			opentracing.SetGlobalTracer(tracer)
+			spCtx, ctxsuberr := ExtractWithTracer(d.Headers, ProcessTracer)
+			if ctxsuberr != nil {
+				zlog.Error().Err(ctxsuberr).Msg("error Jaeger Extract With Tracer")
+			}
+			sp := opentracing.StartSpan(
+				"Income-successful",
+				opentracing.FollowsFrom(spCtx),
+			)
+			if d.Headers["file-id"] == nil {
+				helloTo = "nil-file-id"
+			} else {
+				helloTo = d.Headers["file-id"].(string)
+
+			}
+			sp.SetTag("file-id", helloTo)
+			defer sp.Finish()
+			ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
+			defer cancel()
+			// Update the context with the span for the subsequent reference.
+			ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
+
+			span, _ := opentracing.StartSpanFromContext(ctx, "IncomeEndsuccessful")
+			defer span.Finish()
+			span.LogKV("error", "false")
+			span.LogKV("error-msg", "false")
+
+		}
+	}
+
+}
+func processendoutcome(err error, d amqp.Delivery) {
+	if err != nil {
+		tracer, closer := tracing.Init("error-Outcome")
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		spCtx, ctxsuberr := ExtractWithTracer(d.Headers, ProcessTracer2)
+		if ctxsuberr != nil {
+			zlog.Error().Err(ctxsuberr).Msg("error Jaeger Extract With Tracer")
+		}
+		sp := opentracing.StartSpan(
+			"Outcome-error",
+			opentracing.FollowsFrom(spCtx),
+		)
+		if d.Headers["file-id"] == nil {
+			helloTo = "nil-file-id"
+		} else {
+			helloTo = d.Headers["file-id"].(string)
+
+		}
+		sp.SetTag("file-id", helloTo)
+		defer sp.Finish()
+		ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
+		defer cancel()
+		// Update the context with the span for the subsequent reference.
+		ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
+
+		span, _ := opentracing.StartSpanFromContext(ctx, "OutcomeEndError")
 		defer span.Finish()
-		span.LogKV("event", err)
+		span.LogKV("error", "true")
+		span.LogKV("error-msg", err)
+	} else {
+		tracer, closer := tracing.Init("successful-Outcome")
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		spCtx, ctxsuberr := ExtractWithTracer(d.Headers, ProcessTracer2)
+		if ctxsuberr != nil {
+			zlog.Error().Err(ctxsuberr).Msg("error Jaeger Extract With Tracer")
+		}
+		sp := opentracing.StartSpan(
+			"Outcome-successful",
+			opentracing.FollowsFrom(spCtx),
+		)
+		if d.Headers["file-id"] == nil {
+			helloTo = "nil-file-id"
+		} else {
+			helloTo = d.Headers["file-id"].(string)
+
+		}
+		sp.SetTag("file-id", helloTo)
+		defer sp.Finish()
+		ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
+		defer cancel()
+		// Update the context with the span for the subsequent reference.
+		ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
+
+		span, _ := opentracing.StartSpanFromContext(ctx, "OutcomeEndsuccessful")
+		defer span.Finish()
+		span.LogKV("error", "false")
+		span.LogKV("error-msg", "false")
+
 	}
 
 }
 
 func processMessage(d amqp.Delivery) error {
+	if JeagerStatus == true {
+		tracer, closer := tracing.Init(thisServiceName)
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		ProcessTracer = tracer
+	}
 
 	if d.Headers["file-id"] == nil ||
 		d.Headers["source-file-location"] == nil ||
@@ -197,13 +333,14 @@ func processMessage(d amqp.Delivery) error {
 	if JeagerStatus == true {
 		helloTo = d.Headers["file-id"].(string)
 		span = ProcessTracer.StartSpan("ProcessFile")
-		span.SetTag("send-msg", helloTo)
+		span.SetTag("file-id", helloTo)
 		defer span.Finish()
+		parentspan = span
 
 		ctx = opentracing.ContextWithSpan(context.Background(), span)
 	}
 
-	publisher, err := rabbitmq.NewQueuePublisher(connection, ProcessingRequestExchange)
+	publisher, err := rabbitmq.NewQueuePublisher(connrecive, ProcessingRequestExchange)
 	if err != nil {
 		return fmt.Errorf("error  starting  Processing Request publisher : %s", err)
 	}
@@ -227,7 +364,8 @@ func processMessage(d amqp.Delivery) error {
 
 	if JeagerStatus == true {
 		if err := Inject(span, headers); err != nil {
-			return err
+			return fmt.Errorf("error jaeger can not inject headers : %s", err)
+
 		}
 	}
 	// Publish the details to Rabbit
@@ -243,15 +381,19 @@ func processMessage(d amqp.Delivery) error {
 
 func outcomeProcessMessage(d amqp.Delivery) error {
 	if JeagerStatus == true {
+		tracer, closer := tracing.Init("outMsgs")
+		defer closer.Close()
+		opentracing.SetGlobalTracer(tracer)
+		ProcessTracer2 = tracer
+	}
+	if JeagerStatus == true {
 
 		if d.Headers["uber-trace-id"] != nil {
 			fmt.Println("uber-trace-id")
 			spCtx, ctxsuberr := ExtractWithTracer(d.Headers, ProcessTracer2)
-			if spCtx == nil {
-				fmt.Println("cpctxsub nil 1")
-			}
+
 			if ctxsuberr != nil {
-				fmt.Println(ctxsuberr)
+				zlog.Error().Err(ctxsuberr).Msg("error Jaeger Extract With Tracer")
 			}
 			// Extract the span context out of the AMQP header.
 			sp := opentracing.StartSpan(
@@ -265,7 +407,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 			}
 			sp.SetTag("file-clean", helloTo)
 			defer sp.Finish()
-			ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			ctxsubtx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
 			defer cancel()
 			// Update the context with the span for the subsequent reference.
 			ctx = opentracing.ContextWithSpan(ctxsubtx, sp)
@@ -277,7 +419,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 				helloTo = d.Headers["file-id"].(string)
 			}
 			span := ProcessTracer2.StartSpan("outcomeProcessMessage")
-			span.SetTag("msg-procces", helloTo)
+			span.SetTag("file-id", helloTo)
 			defer span.Finish()
 
 			ctx = opentracing.ContextWithSpan(context.Background(), span)
@@ -291,7 +433,7 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 	reportFileName := "report.xml"
 	metadataFileName := "metadata.json"
 
-	publisher, err := rabbitmq.NewQueuePublisher(connection, ProcessingRequestExchange)
+	publisher, err := rabbitmq.NewQueuePublisher(connsend, ProcessingRequestExchange)
 	if err != nil {
 		return fmt.Errorf("error  starting  adaptation outcome publisher : %s", err)
 	}
