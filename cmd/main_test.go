@@ -354,6 +354,7 @@ func TestProcessMessage(t *testing.T) {
 				main()
 			})
 		}()
+		time.Sleep(3 * time.Second)
 
 		close(done)
 		<-done
