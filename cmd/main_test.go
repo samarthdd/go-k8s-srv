@@ -156,6 +156,9 @@ func TestProcessMessage(t *testing.T) {
 	AdaptationOutcomeQueueName = "amq.rabbitmq.reply-to"
 	JeagerStatusEnv = "true"
 	transactionStorePath = "/tmp"
+	adaptationRequestQueueHostname = "amqp://localhost"
+	adaptationRequestQueuePort = "5672"
+
 	// get env secrets
 	var errstring error
 
