@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -118,6 +119,7 @@ func minioserver() {
 	}
 	ResourceMinio = resource
 	endpoint = fmt.Sprintf("localhost:%s", resource.GetPort("9000/tcp"))
+	minioEndpoint = endpoint
 	if err := poolMinio.Retry(func() error {
 		url := fmt.Sprintf("http://%s/minio/health/live", endpoint)
 		resp, err := http.Get(url)
@@ -152,6 +154,11 @@ func TestProcessMessage(t *testing.T) {
 	AdaptationOutcomeExchange = "adaptation-exchange"
 	AdaptationOutcomeRoutingKey = "adaptation-exchange"
 	AdaptationOutcomeQueueName = "amq.rabbitmq.reply-to"
+	JeagerStatusEnv = "true"
+	transactionStorePath = "/tmp"
+	adaptationRequestQueueHostname = "localhost"
+	adaptationRequestQueuePort = "5672"
+
 	// get env secrets
 	var errstring error
 
@@ -269,10 +276,12 @@ func TestProcessMessage(t *testing.T) {
 
 	})
 	tableout := amqp.Table{
-		"file-id":               fn,
-		"clean-presigned-url":   "http://localhost:9000",
-		"rebuilt-file-location": "./reb.pdf",
-		"reply-to":              "replay",
+		"file-id":                fn,
+		"clean-presigned-url":    "http://localhost:9000",
+		"rebuilt-file-location":  "./reb.pdf",
+		"report-presigned-url":   "http://localhost:9000",
+		"metadata-presigned-url": "http://localhost:9000",
+		"reply-to":               "replay",
 	}
 
 	var dout amqp.Delivery
@@ -312,6 +321,44 @@ func TestProcessMessage(t *testing.T) {
 			}
 		})
 	}
+	t.Run("TestRemoveProcessedFilesMinio", func(t *testing.T) {
+		type args struct {
+			fileName   string
+			BucketName string
+		}
+		tests := []struct {
+			name string
+			args args
+		}{
+			{
+				"removefileminio",
+				args{
+					"unittest.pdf",
+					cleanMinioBucket,
+				},
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				RemoveProcessedFilesMinio(tt.args.fileName, tt.args.BucketName)
+			})
+		}
+	})
+
+	t.Run("main", func(t *testing.T) {
+
+		done := make(chan bool)
+
+		go func() {
+			t.Run("main", func(t *testing.T) {
+				main()
+			})
+		}()
+		time.Sleep(10 * time.Second)
+
+		close(done)
+		<-done
+	})
 	// When you're done, kill and remove the container
 	if err = poolMq.Purge(ResourceMQ); err != nil {
 		fmt.Printf("Could not purge resource: %s", err)
@@ -530,6 +577,90 @@ func TestExtractWithTracer(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("ExtractWithTracer() = %v, want %v", got, tt.want)
 			}
+		})
+	}
+}
+
+func Test_processend(t *testing.T) {
+	tablefile := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	tablenofile := amqp.Table{
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	var dfile amqp.Delivery
+	dfile.Headers = tablefile
+	var dnofile amqp.Delivery
+	dnofile.Headers = tablenofile
+	err1 := errors.New("file-id:not found")
+
+	type args struct {
+		err error
+		d   amqp.Delivery
+	}
+	tests := []struct {
+		name string
+		args args
+	}{
+		{
+			"end-with-error",
+			args{err1, dnofile},
+		},
+		{
+			"end-successfully",
+			args{nil, dfile},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processend(tt.args.err, tt.args.d)
+		})
+	}
+}
+
+func Test_processendoutcome(t *testing.T) {
+	tablefile := amqp.Table{
+		"file-id":               "id-test",
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	tablenofile := amqp.Table{
+		"clean-presigned-url":   "http://localhost:9000",
+		"rebuilt-file-location": "./reb.pdf",
+		"reply-to":              "replay",
+	}
+	var dfile amqp.Delivery
+	dfile.Headers = tablefile
+	var dnofile amqp.Delivery
+	dnofile.Headers = tablenofile
+	err1 := errors.New("file-id:not found")
+
+	type args struct {
+		err error
+		d   amqp.Delivery
+	}
+	tests := []struct {
+		name string
+		args args
+	}{
+		{
+			"end-with-error",
+			args{err1, dnofile},
+		},
+		{
+			"end-successfully",
+			args{nil, dfile},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processendoutcome(tt.args.err, tt.args.d)
 		})
 	}
 }

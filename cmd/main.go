@@ -42,9 +42,6 @@ var (
 	messagebrokeruser              = os.Getenv("MESSAGE_BROKER_USER")
 	messagebrokerpassword          = os.Getenv("MESSAGE_BROKER_PASSWORD")
 
-	TikaRequestExange           = "comparison-request-exchange"
-	ComparisonRequestRoutingKey = "comparison-request"
-
 	minioEndpoint        = os.Getenv("MINIO_ENDPOINT")
 	minioAccessKey       = os.Getenv("MINIO_ACCESS_KEY")
 	minioSecretKey       = os.Getenv("MINIO_SECRET_KEY")
@@ -56,7 +53,7 @@ var (
 	connrecive           *amqp.Connection
 	connsend             *amqp.Connection
 	JeagerStatus         bool
-	tikasataus           bool
+	JeagerStatusEnv      = os.Getenv("JAEGER_AGENT_ON")
 )
 
 const thisServiceName = "GWFileProcess"
@@ -74,14 +71,7 @@ const (
 )
 
 func main() {
-	tikasatausenv := os.Getenv("TIKA_COMPARISON_ON")
-	if tikasatausenv == "true" {
-		tikasataus = true
-	} else {
-		tikasataus = false
-	}
 
-	JeagerStatusEnv := os.Getenv("JAEGER_AGENT_ON")
 	if JeagerStatusEnv == "true" {
 		JeagerStatus = true
 	} else {
@@ -122,7 +112,7 @@ func main() {
 	minioClient, err = minio.NewMinioClient(minioEndpoint, minioAccessKey, minioSecretKey, false)
 
 	if err != nil {
-		zlog.Fatal().Err(err).Msg("could not start minio client ")
+		zlog.Fatal().Err(err).Msg("could not start minio client")
 	}
 
 	err = createBucketIfNotExist(sourceMinioBucket)
@@ -447,12 +437,6 @@ func outcomeProcessMessage(d amqp.Delivery) error {
 		zlog.Info().Msg("rebuilt file downloaded from minio successfully")
 	} else {
 		zlog.Info().Msg("there is no rebuilt file to download from minio")
-	}
-	if tikasataus {
-		err = rabbitmq.PublishMessage(publisher, TikaRequestExange, ComparisonRequestRoutingKey, d.Headers, []byte(""))
-		if err != nil {
-			return fmt.Errorf("error publish to comparison request queue : %s", err)
-		}
 	}
 
 	if d.Headers["report-presigned-url"] != nil {
